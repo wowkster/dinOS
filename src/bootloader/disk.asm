@@ -65,7 +65,7 @@ disk_read:
     ; Create a retry counter to tell us when to stop reading after failures
     mov di, 3 ; Counter
 
-disk_read_try:
+.try_read:
     ; Restore the number of sectors to read
     mov al, [bp-4]
     
@@ -75,29 +75,29 @@ disk_read_try:
     int 0x13
 
     ; If carry is set, there was an error
-    jc disk_read_error
+    jc .read_error
 
     ; If the number of sectors read and the number we requested are different,
     ; there was an error
     cmp [bp-4], al
-    jne disk_read_error
+    jne .read_error
 
     ; Jump to end if succeeded
-    jmp disk_read_done
+    jmp .read_done
 
-disk_read_error:
+.read_error:
     ; If failed, reset the disk system
     call disk_reset
 
     ; If we havent reached the retry limit, try again
     dec di
     test di, di
-    jnz disk_read_try
+    jnz .try_read
 
     ; If we have reached the limit, jump to hard failure
     jmp disk_fail
 
-disk_read_done:
+.read_done:
     ; Restore the stack
     mov sp, bp
     pop bp
@@ -135,4 +135,4 @@ disk_fail:
     call print
     jmp halt
 
-read_failure_msg: db 'ERRDISK', 0x0D, 0x0A, 0
+read_failure_msg: db 'ERRDSK', 0x0D, 0x0A, 0
