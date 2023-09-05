@@ -5,17 +5,6 @@
 ; https://www.sqlpassion.at/archive/2022/03/03/reading-files-from-a-fat12-partition/
 ;
 
-;
-; Converts an a FAT index into a physical sector number on the disk
-; @input ax - FAT index
-; @output ax - Sector number
-;
-fat_index_to_sector_number:
-    ; physical sector number = 33 + FAT entry number - 2
-    add ax, 33
-    sub ax, 2
-    ret
-
 ; Algorithm to read and unpack the nth FAT entry from the table
 ; 
 ; - If n is even, then the physical location of the entry is the low four bits in location 1+(3*n)/2
@@ -100,8 +89,9 @@ fat_read_file_from_fat:
     mov ax, [bp-2] ; Current cluster index
 
 .disk_read:
-    ; Get the sector number of the cluster
-    call fat_index_to_sector_number ; Sector number in ax
+    ; Converts the FAT index into a physical sector number on the disk
+    add ax, 33
+    sub ax, 2 ; Sector number in ax
 
     ; Calculate the dest address from the offset
     mov bx, di
