@@ -1,4 +1,10 @@
 ;
+; Disk operations that use the int 0x13 BIOS interrupt:
+;
+; https://en.wikipedia.org/wiki/INT_13H
+;
+
+;
 ; Converts a disk location from LBA indexing to CHS indexing format
 ;   @input ax - LBA index
 ;   @output cx [bits 0-5] - sector number

@@ -466,6 +466,7 @@ define step_until_code
   context
 end
 
+# https://stackoverflow.com/questions/25786982/how-can-gdb-show-both-hex-and-ascii-when-examing-memory
 define xac
     dont-repeat
     if $argc == 3

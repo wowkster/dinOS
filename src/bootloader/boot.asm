@@ -17,6 +17,11 @@ bits 16
 ; After jumping over the header to our bootloader code, we will load the kernel
 ; from the disk, set up the Global Descriptor Table (GDT), make the jump to
 ; 32-bit protected mode, and finally call the kernel entry point.
+;
+; Refences:
+; - https://dev.to/frosnerd/writing-my-own-boot-loader-3mld
+; - https://www.youtube.com/@olivestemlearning
+;
 
 ; FAT Boot Sector Header
 ; https://en.wikipedia.org/wiki/Design_of_the_FAT_file_system#Boot_Sector
@@ -64,6 +69,8 @@ ebpb_file_system_id: db 'FAT12   '
 ; 0x7C00-7DFF - MBR Loaded by the BIOS bootsector-loader (512B)
 ; 0x7E00-7FFF - Bootloader Stack (512B)
 ; 0x8000-FFFF - Kernel (32KiB)
+;
+; x86 memory layout reference: https://i.stack.imgur.com/A8gMs.png
 ;
 main:
     ; Initialize the registers of the processor to a known state

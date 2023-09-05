@@ -1,4 +1,11 @@
 ;
+; Naive implementation of basic FAT12 driver
+;
+; https://www.eit.lth.se/fileadmin/eit/courses/eitn50/Literature/fat12_description.pdf
+; https://www.sqlpassion.at/archive/2022/03/03/reading-files-from-a-fat12-partition/
+;
+
+;
 ; Converts an a FAT index into a physical sector number on the disk
 ; @input ax - FAT index
 ; @output ax - Sector number
