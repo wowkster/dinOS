@@ -17,9 +17,8 @@ bits 16
 ; code. The FAT specification is aware of this, and actually enforces that the
 ; first 3 bytes of the boot sector be a short jump to the start of the boot code. 
 ; 
-; After jumping over the header to our bootloader code, we will load the kernel
-; from the disk, set up the Global Descriptor Table (GDT), make the jump to
-; 32-bit protected mode, and finally call the kernel entry point.
+; After jumping over the header to our bootloader code, we will load the stage
+; 2 bootloader from the disk.
 ;
 ; Refences:
 ; - https://dev.to/frosnerd/writing-my-own-boot-loader-3mld
@@ -67,6 +66,7 @@ ebpb_file_system_id: db 'FAT12   '
 ; of the physical drive that was booted from.
 ;
 ; Bootloader Memory Layout:
+; 0x1000-4DFF - Second stage bootloader (15KiB)
 ; 0x4E00-69FF - FAT Root Directory (14 * 512 = 7KiB)
 ; 0x6A00-7BFF - FAT Table (9 * 512 = 4.5KiB)
 ; 0x7C00-7DFF - MBR Loaded by the BIOS bootsector-loader (512B)
@@ -103,10 +103,10 @@ main:
         mov cl, 14                  ; Read 14 sectors
         call disk_read
 
-    ; Load the kernel into memory
-    .load_kernel:
-        mov si, kernel_file_name
-        mov bx, KERNEL_ADDR
+    ; Load the second stage bootloader into memory
+    .load_stage2:
+        mov si, stage2_file_name
+        mov bx, STAGE2_ADDR
         call fat_find_and_read_root_file
 
     ; Print a friendly message
@@ -114,18 +114,21 @@ main:
         mov si, os_boot_msg
         call print
 
-    ; Jump to the kernel that we just loaded into memory
-    .jump_to_kernel:
+    ; Pass pointers to bootloader functions to stage 2
+    .load_fn_pointers:
         mov ax, print
         mov bx, fat_find_and_read_root_file
-        jmp KERNEL_ADDR
+
+    ; Jump to the second stage bootloader that we just loaded into memory
+    .jump_to_stage2:
+        jmp STAGE2_ADDR
 
 halt:
     ; Halt the processor
     hlt
     jmp halt
 
-KERNEL_ADDR equ 0x8000
+STAGE2_ADDR equ 0x1000
 FAT_TABLE_ADDR equ 0x6A00
 FAT_ROOT_DIR_ADDR equ 0x4E00
 
@@ -134,7 +137,7 @@ FAT_ROOT_DIR_ADDR equ 0x4E00
 %include "fat.asm"
 
 os_boot_msg: db 'DinOS booted!', 0x0D, 0x0A, 0
-kernel_file_name: db 'KERNEL  BIN', 0
+stage2_file_name: db 'BOOT    BIN', 0
 
 ; Pad the MBR to 510 bytes
 times 510-($-$$) db 0

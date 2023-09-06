@@ -1,3 +1,3 @@
 {
-    "nasm.extraFlags": ["-isrc/bootloader/"]
+    "nasm.extraFlags": ["-isrc/bootloader/stage1", "-isrc/bootloader/stage2", "-isrc/kernel"]
 }
