@@ -116,6 +116,8 @@ main:
 
     ; Jump to the kernel that we just loaded into memory
     .jump_to_kernel:
+        mov ax, print
+        mov bx, fat_find_and_read_root_file
         jmp KERNEL_ADDR
 
 halt:
