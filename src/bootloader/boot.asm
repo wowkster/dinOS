@@ -128,7 +128,7 @@ FAT_ROOT_DIR_ADDR equ 0x4E00
 %include "fat.asm"
 
 os_boot_msg: db 'KAOS booted!', 0x0D, 0x0A, 0
-kernel_file_name: db 'KERNEL  BIN'
+kernel_file_name: db 'KERNEL  BIN', 0
 
 ; Pad the MBR to 510 bytes
 times 510-($-$$) db 0

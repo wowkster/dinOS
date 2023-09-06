@@ -231,7 +231,16 @@ fat_find_and_read_root_file:
     jmp .search_loop
 
 .file_not_found:
-    ; TODO: handle search failure
+    ; Print error code and space
+    mov si, fat_file_not_found_msg
+    call print
+
+    ; Print file name
+    popa
+    call print
+
+    ; Halt the processor
+    jmp halt
 
 .file_found:
     ; Get the number of the first logical cluster
@@ -245,4 +254,5 @@ fat_find_and_read_root_file:
     popa
     ret
 
-fat_read_entry_failure_msg: db 'ERRFAT', 0x0D, 0x0A, 0
+fat_read_entry_failure_msg: db 'ERRFAT', 0
+fat_file_not_found_msg: db 'ERRFNF: ', 0

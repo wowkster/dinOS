@@ -135,4 +135,4 @@ disk_fail:
     call print
     jmp halt
 
-read_failure_msg: db 'ERRDSK', 0x0D, 0x0A, 0
+read_failure_msg: db 'ERRDSK', 0
