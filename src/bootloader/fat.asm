@@ -21,7 +21,6 @@
 ; }
 ;
 ; @input ax - FAT index
-; @input es:bx - Address of FAT table in memory
 ; @output ax - FAT entry
 fat_read_entry_from_fat:
     push cx
@@ -36,6 +35,7 @@ fat_read_entry_from_fat:
     shr ax, 1   ; (n * 3) / 2
 
     ; Add offset to calculate start address of entry
+    mov bx, FAT_TABLE_ADDR
     add bx, ax
 
     ; Read the entry bytes into cx
@@ -66,21 +66,18 @@ fat_read_entry_from_fat:
 ; Reads an entire file from the disk into memory given the index of the first cluster
 ; 
 ; @input ax - First logical cluster index
-; @input es:bx - Address of FAT table in memory
 ; @input es:cx - Destination address
 ;
 fat_read_file_from_fat:
-    push di
+    pusha
 
-    ; Make room for 8 bytes on the stack
-    push bp
+    ; Make room for 4 bytes on the stack
     mov bp, sp
-    sub sp, 8
+    sub sp, 4
 
     ; Store input variables on the stack
     mov [bp-2], ax      ; Current cluster index
-    mov [bp-4], bx      ; FAT table pointer
-    mov [bp-6], cx      ; Dest base pointer
+    mov [bp-4], cx      ; Dest base pointer
 
     ; Create an incrementing sector offset to add to the dest base pointer
     mov di, 0
@@ -96,7 +93,7 @@ fat_read_file_from_fat:
     ; Calculate the dest address from the offset
     mov bx, di
     shl bx, 9       ; Multiply by 512
-    mov cx, [bp-6]  ; Dest base pointer
+    mov cx, [bp-4]  ; Dest base pointer
     add bx, cx      ; Read dest in bx
     
     ; Read the sector into memory
@@ -110,7 +107,6 @@ fat_read_file_from_fat:
 .get_entry:
     ; Get entry from FAT at the current index
     mov ax, [bp-2]                  ; Current cluster index
-    mov bx, [bp-4]                  ; FAT pointer
     call fat_read_entry_from_fat    ; FAT[curr_idx] in ax
     mov [bp-2], ax                  ; curr_idx = FAT[curr_idx]
 
@@ -144,16 +140,7 @@ fat_read_file_from_fat:
     jmp halt
 
 .read_done:
-    ; Restore input vars
-    mov ax, [bp-2]
-    mov bx, [bp-4]
-    mov cx, [bp-6]
-    
-    ; Restore the stack
-    mov sp, bp
-    pop bp
-    
-    pop di
+    popa
     ret
 
 ;
@@ -252,7 +239,6 @@ fat_find_and_read_root_file:
     mov ax, [bx]
     
     ; Read the entire file into memory
-    mov bx, FAT_TABLE_ADDR
     call fat_read_file_from_fat
 
 .search_done:
