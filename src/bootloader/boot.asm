@@ -57,7 +57,7 @@ ebpb_drive_number:   db 0
 ebpb_flags:          db 0
 ebpb_signature:      db 0x29                   ; 4.1
 ebpb_volume_id:      db 0x12, 0x34, 0x56, 0x78 ; Volume serial number
-ebpb_volume_label:   db 'KAOS       ' 
+ebpb_volume_label:   db 'DINOS      ' 
 ebpb_file_system_id: db 'FAT12   '
 
 ;
@@ -131,7 +131,7 @@ FAT_ROOT_DIR_ADDR equ 0x4E00
 %include "disk.asm"
 %include "fat.asm"
 
-os_boot_msg: db 'KAOS booted!', 0x0D, 0x0A, 0
+os_boot_msg: db 'DinOS booted!', 0x0D, 0x0A, 0
 kernel_file_name: db 'KERNEL  BIN', 0
 
 ; Pad the MBR to 510 bytes
