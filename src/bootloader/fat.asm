@@ -147,6 +147,8 @@ fat_read_file_from_fat:
     jmp halt
 
 .read_done:
+    add sp, 4
+
     popa
     ret
 
