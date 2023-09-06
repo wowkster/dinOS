@@ -114,8 +114,9 @@ main:
         mov si, os_boot_msg
         call print
 
+    ; Jump to the kernel that we just loaded into memory
     .jump_to_kernel:
-        jmp 0x8000
+        jmp KERNEL_ADDR
 
 halt:
     ; Halt the processor
