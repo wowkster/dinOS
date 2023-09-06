@@ -1,6 +1,8 @@
 %ifndef PRINT_ASM
 %define PRINT_ASM
 
+%include "boot.asm"
+
 ; 
 ; Prints a given string to the screen using BIOS interrupts
 ; @input si - Pointer to the string to print
@@ -27,5 +29,9 @@ print:
 .print_done:
     popa
     ret
+
+print_halt:
+    call print
+    jmp halt
 
 %endif

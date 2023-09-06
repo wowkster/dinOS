@@ -137,8 +137,7 @@ disk_reset:
 disk_fail:
     ; Print a failure message and halt
     mov si, read_failure_msg
-    call print
-    jmp halt
+    call print_halt
 
 read_failure_msg: db 'ERRDSK', 0
 

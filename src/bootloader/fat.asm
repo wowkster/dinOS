@@ -143,8 +143,7 @@ fat_read_file_from_fat:
 .error:
     ; Print a failure message and halt
     mov si, fat_read_entry_failure_msg
-    call print
-    jmp halt
+    call print_halt
 
 .read_done:
     add sp, 4
@@ -188,7 +187,7 @@ fat_dir_entry_matches:
 .matched:
     ; Set zero flag
     lahf                      ; Load AH from FLAGS
-    or       AH,001000000b    ; Set bit for ZF
+    or       ah, 001000000b    ; Set bit for ZF
     sahf                      ; Store AH back to Flags
 
     jmp .finished
@@ -196,7 +195,7 @@ fat_dir_entry_matches:
 .not_matched:
     ; Clear zero flag
     lahf                      ; Load lower 8 bit from Flags into AH
-    and      AH,010111111b    ; Clear bit for ZF
+    and      ah, 010111111b    ; Clear bit for ZF
     sahf                      ; Store AH back to Flags
 
     jmp .finished
@@ -244,12 +243,9 @@ fat_find_and_read_root_file:
     mov si, fat_file_not_found_msg
     call print
 
-    ; Print file name
+    ; Print file name and halt
     popa
-    call print
-
-    ; Halt the processor
-    jmp halt
+    call print_halt
 
 .file_found:
     ; Get the number of the first logical cluster
