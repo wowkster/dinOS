@@ -1,3 +1,10 @@
+%ifndef FAT_ASM
+%define FAT_ASM
+
+%include "boot.asm"
+%include "disk.asm"
+%include "print.asm"
+
 ;
 ; Naive implementation of basic FAT12 driver
 ;
@@ -256,3 +263,5 @@ fat_find_and_read_root_file:
 
 fat_read_entry_failure_msg: db 'ERRFAT', 0
 fat_file_not_found_msg: db 'ERRFNF: ', 0
+
+%endif

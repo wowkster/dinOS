@@ -1,3 +1,6 @@
+%ifndef BOOT_ASM
+%define BOOT_ASM
+
 org 0x7C00
 bits 16
 
@@ -135,3 +138,5 @@ times 510-($-$$) db 0
 
 ; Magic bytes to signal to the BIOS that this disk is bootable
 dw 0xAA55
+
+%endif

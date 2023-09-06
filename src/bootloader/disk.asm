@@ -1,3 +1,8 @@
+%ifndef DISK_ASM
+%define DISK_ASM
+
+%include "boot.asm"
+
 ;
 ; Disk operations that use the int 0x13 BIOS interrupt:
 ;
@@ -136,3 +141,5 @@ disk_fail:
     jmp halt
 
 read_failure_msg: db 'ERRDSK', 0
+
+%endif
