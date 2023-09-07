@@ -44,4 +44,4 @@ $(BUILD_DIR)/stage2.bin: $(SRC_DIR)/bootloader/stage2/*.asm
 #
 kernel: $(BUILD_DIR)/kernel.bin
 $(BUILD_DIR)/kernel.bin: $(SRC_DIR)/kernel/*.asm
-	$(ASM) $(SRC_DIR)/kernel/main.asm -f bin -o $(BUILD_DIR)/kernel.bin
+	$(ASM) $(SRC_DIR)/kernel/kmain.asm -f bin -o $(BUILD_DIR)/kernel.bin
