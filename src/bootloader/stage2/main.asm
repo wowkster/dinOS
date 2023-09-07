@@ -52,13 +52,6 @@ main:
     .jump_to_kernel:
         jmp KERNEL_ADDR
 
-;
-; Halt the processor if the kernel exited for some reason
-; 
-halt:
-    hlt
-    jmp halt
-
 ; Address Constants
 KERNEL_STACK_ADDR equ 0x10000
 KERNEL_ADDR_SEGMENT equ 0x1000
