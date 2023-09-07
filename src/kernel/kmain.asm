@@ -12,12 +12,16 @@ kmain:
         mov esi, kernel_msg_2
         call kprintln
     
+    .enable_interrupts:
+        call init_interrupts
+
 halt:
     ; Halt the processor
     hlt
     jmp halt
 
 %include "vga.asm"
+%include "interrupt.asm"
 
 kernel_msg_1: db 'Hello from the kernel!', 0
 kernel_msg_2: db 'This tetx is on another line!', 0
