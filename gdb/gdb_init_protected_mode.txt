@@ -1,0 +1,5 @@
+# Use assembly layout
+layout asm
+
+# Use intel syntax
+set disassembly-flavor intel
