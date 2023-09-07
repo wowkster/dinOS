@@ -71,7 +71,8 @@ ebpb_file_system_id: db 'FAT12   '
 ; 0x6A00-7BFF - FAT Table (9 * 512 = 4.5KiB)
 ; 0x7C00-7DFF - MBR Loaded by the BIOS bootsector-loader (512B)
 ; 0x7E00-7FFF - Bootloader Stack (512B)
-; 0x8000-FFFF - Kernel (32KiB)
+; 0x8000-FFFF - Kernel Stack (32KiB)
+; 0x10000-1FFFF - Kernel (64KiB)
 ;
 ; x86 memory layout reference: https://i.stack.imgur.com/A8gMs.png
 ;
@@ -83,7 +84,7 @@ main:
     mov ss, ax
 
     ; Setup the stack to a known place in memory (grows down)
-    mov bp, 0x8000
+    mov bp, BOOTLOADER_STACK_BASE
     mov sp, bp
 
     ; Store the booted drive number (from BIOS) into memory
@@ -128,6 +129,8 @@ halt:
     hlt
     jmp halt
 
+; Address Constants
+BOOTLOADER_STACK_BASE equ 0x8000
 STAGE2_ADDR equ 0x1000
 FAT_TABLE_ADDR equ 0x6A00
 FAT_ROOT_DIR_ADDR equ 0x4E00
@@ -136,6 +139,7 @@ FAT_ROOT_DIR_ADDR equ 0x4E00
 %include "disk.asm"
 %include "fat.asm"
 
+; String Data
 os_boot_msg: db 'DinOS booted!', 0x0D, 0x0A, 0
 stage2_file_name: db 'BOOT    BIN', 0
 
