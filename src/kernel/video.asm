@@ -54,6 +54,36 @@ kprint:
     ret
 
 ;
+; Prints a given string into the VGA video memory in text mode and moves the cursor down to the next line
+; @input esi - Pointer to the string to print (null terminated)
+;
+kprintln:
+    pusha
+
+    ; Print the string
+    call kprint
+
+    ; Calculate the index into the current line
+    ; dx := _print_offset % 80
+    xor dx, dx
+    mov ax, [_print_offset]
+    mov bx, 80
+    div bx
+
+    ; Calculate the number of remaining characters in the current line
+    ; bx := 80 - (_print_offset % 80)
+    sub bx, dx
+
+    ; Move the print offset to the next line
+    ; _print_offset += 80 - (_print_offset % 80)
+    mov ax, [_print_offset]
+    add ax, bx
+    mov [_print_offset], ax
+
+    popa
+    ret
+
+;
 ; Function to clear the entire video buffer
 ;
 clear_screen:
