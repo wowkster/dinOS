@@ -144,9 +144,11 @@ pic_remap_offsets:
         mov al, [esp + 2]
         out PIC2_DATA_PORT, al
 
-    .program_done:
-        popad
-        ret
+    ; Restore the stack for return
+    mov esp, ebp
+
+    popad
+    ret
 
 ;
 ; Disables the PIC to use the processor local APIC and the IOAPIC
