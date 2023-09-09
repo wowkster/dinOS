@@ -21,7 +21,7 @@ halt:
     jmp halt
 
 %include "vga.asm"
-%include "interrupt.asm"
+%include "interrupt/init.asm"
 
 kernel_msg_1: db 'Hello from the kernel!', 0
 kernel_msg_2: db 'This tetx is on another line!', 0
