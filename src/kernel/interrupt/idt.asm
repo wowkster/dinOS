@@ -59,6 +59,7 @@ idt_init:
     ret
 
 ;
+; Inserts an interrupt handler into the IDT
 ; @input eax - pointer to interrupt handler
 ; @input bl - interrupt type
 ; @input ecx - entry number
@@ -67,7 +68,7 @@ idt_update:
     pushad
 
     ; Calculate start address of entry
-    mov edx, [IDT_start + ecx * 8]
+    lea edx, [IDT_start + ecx * 8]
     
     ; Lower 16 bits of offset
     mov word [edx], ax
