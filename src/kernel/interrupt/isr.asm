@@ -12,8 +12,9 @@ isr_exception:
     mov esi, exception_msg
     call kprintln
 
-    hlt
-    jmp $
+    .halt:
+        hlt
+        jmp .halt
 
 exception_msg: db 'Unhandled Exception!', 0
 
