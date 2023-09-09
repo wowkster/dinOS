@@ -15,11 +15,13 @@ _print_offset: dw 0
 ; @input esi - Pointer to the string to print (null terminated)
 ;
 kprint: 
-    pusha
+    pushad
 
     ; All text will be printed as white on black for now
     mov ah, WHITE_ON_BLACK
-    xor bx, bx
+
+    ; ebx will hold our offset
+    xor ebx, ebx
 
 .print_loop:
     ; Load a character from esi register into al 
@@ -50,7 +52,7 @@ kprint:
     jmp .print_loop
 
 .print_done:
-    popa
+    popad
     ret
 
 ;
@@ -58,7 +60,7 @@ kprint:
 ; @input esi - Pointer to the string to print (null terminated)
 ;
 kprintln:
-    pusha
+    pushad
 
     ; Print the string
     call kprint
@@ -80,14 +82,14 @@ kprintln:
     add ax, bx
     mov [_print_offset], ax
 
-    popa
+    popad
     ret
 
 ;
 ; Function to clear the entire video buffer
 ;
 clear_screen:
-    pusha 
+    pushad
 
     ; Clear upper bits of EDI (counter)
     xor edi, edi
@@ -104,7 +106,7 @@ clear_screen:
     jne .clear_loop
 
 .clear_done:
-    popa
+    popad
     ret
 
 %endif
