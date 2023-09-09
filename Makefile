@@ -18,6 +18,7 @@ $(BUILD_DIR)/main.img: build_dir bootloader kernel
 # Ensures that the build directory exists
 #
 build_dir: $(BUILD_DIR)
+$(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 #
