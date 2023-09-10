@@ -56,6 +56,63 @@ kprint:
     ret
 
 ;
+; Prints a byte as hex ("0x??")
+; @input al - byte to print
+;
+kprint_byte:
+    pushad
+    
+    ; Convert byte into hex chars
+    call byte_to_hex
+
+    ; Insert into template string
+    mov byte [.template + 2], ah
+    mov byte [.template + 3], al
+
+    mov si, .template
+    call kprint
+
+    popad
+    ret
+
+    .template: db "0x??", 0
+
+;
+; Accepts an input byte and returns the char codes for it's individual nibbles
+;
+; @input al - byte to conver to hex
+; @ouput al - first nibble (LS)
+; @output ah - second nibble (MS)
+;
+byte_to_hex:
+    push ebx
+
+    ; Make a copy of the input byte
+    mov ah, al
+    
+    ; Get least significant nibble in al
+    and al, 0x0F
+
+    ; Get most significant nibble in ah
+    shr ah, 4
+
+    ; Clear upper bits of ebx so we can use it as an offset into the table
+    xor ebx, ebx
+
+    ; Index into the table to get the first char code
+    mov bl, al
+    mov al, [.table + ebx]
+
+    ; Index into the table to get the second char code
+    mov bl, ah
+    mov ah, [.table + ebx]
+
+    pop ebx
+    ret
+
+    .table: db "0123456789ABCDEF"
+
+;
 ; Prints a given string into the VGA video memory in text mode and moves the cursor down to the next line
 ; @input esi - Pointer to the string to print (null terminated)
 ;
