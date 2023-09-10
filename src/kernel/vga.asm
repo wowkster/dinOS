@@ -80,7 +80,16 @@ kprintln:
     ; _print_offset += 80 - (_print_offset % 80)
     mov ax, [_print_offset]
     add ax, bx
-    mov [_print_offset], ax
+
+    ; Reset the offset if we reached the end of the screen
+    cmp ax, SCREEN_CAPACITY
+    jl .store_offset
+
+    .reset_offset:
+        mov ax, 0
+
+    .store_offset:
+        mov [_print_offset], ax
 
     popad
     ret
