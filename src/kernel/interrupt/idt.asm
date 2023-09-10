@@ -40,13 +40,13 @@ idt_init:
     %assign i i+1 
     %endrep
 
-    ; ; Keyboard handler
-    ; mov eax, isr_keyboard
-    ; mov bl, IDT_TYPE_IRQ
-    ; mov ecx, PIC1_OFFSET + 1
-    ; call idt_update
+    ; Keyboard handler
+    mov eax, isr_keyboard
+    mov bl, IDT_TYPE_IRQ
+    mov ecx, PIC1_OFFSET + 1
+    call idt_update
 
-    ; ; Spurious Interrupt handler
+    ; Spurious Interrupt handler
 	; mov	eax,	isr_spurious_interrupt
 	; mov	bl,	IDT_TYPE_IRQ
 	; mov	ecx,	255
