@@ -95,6 +95,20 @@ kprintln:
     ret
 
 ;
+; Prints an empty line
+;
+kprint_empty_line:
+    push esi
+
+    mov esi, .empty_str
+    call kprintln
+
+    pop esi
+    ret
+
+    .empty_str: db 0
+
+;
 ; Function to clear the entire video buffer
 ;
 clear_screen:
