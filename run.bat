@@ -1,2 +1,2 @@
 :: Run qemu normally
-qemu-system-i386 -fda ./build/main.img
+qemu-system-i386 -monitor stdio -fda ./build/main.img
