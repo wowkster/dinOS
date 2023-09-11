@@ -1,7 +1,10 @@
+SHELL := bash -O extglob
 ASM=nasm
 
 SRC_DIR=src
 BUILD_DIR=build
+
+all: floppy_image
 
 #
 # Floppy Image
@@ -44,5 +47,5 @@ $(BUILD_DIR)/stage2.bin: $(SRC_DIR)/bootloader/stage2/*.asm
 # Kernel
 #
 kernel: $(BUILD_DIR)/kernel.bin
-$(BUILD_DIR)/kernel.bin: $(SRC_DIR)/kernel/**/*.asm
+$(BUILD_DIR)/kernel.bin: $(SRC_DIR)/kernel/*.asm $(SRC_DIR)/kernel/**/*.asm
 	$(ASM) -i$(SRC_DIR)/kernel/ $(SRC_DIR)/kernel/kmain.asm -f bin -o $(BUILD_DIR)/kernel.bin
