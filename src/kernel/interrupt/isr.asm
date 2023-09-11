@@ -3,6 +3,7 @@
 
 %include "vga.asm"
 %include "interrupt/pic.asm"
+%include "drivers/keyboard.asm"
 
 ;
 ; General exception handler
@@ -19,36 +20,21 @@ isr_exception:
 
 exception_msg: db 'Unhandled Exception! Halting...', 0
 
-KEYBOARD_PORT equ 0x60
-
 ;
 ; Interrupt Service Routine for keyboard interrupts
 ;
 isr_keyboard:
-    pushad
+    push eax
 
-    ; Print initial message
-    mov esi, keyboard_msg
-    call kprint
-
-    ; Read in scan code
-    in al, KEYBOARD_PORT
-
-    ; Print the byte to the screen
-    call kprint_byte
-
-    ; Print a new line
-    call kprint_empty_line
+    ; Call keyboard driver hook
+    call keyboard_driver_handle_interrupt
 
     ; Acknowledge PIC IRQ
     mov ah, 1
     call pic_send_eoi
 
-    ; Return from the interrupt
-    popad
+    pop eax
     iret
-
-keyboard_msg: db 'Caught keyboard interrupt: ', 0
 
 ;
 ; Handler for spurious interrupts
