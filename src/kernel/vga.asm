@@ -1,10 +1,12 @@
 %ifndef PRINT_ASM
 %define PRINT_ASM
 
-bits 32
+%include "mem.asm"
 
 VIDEO_MEMORY_ADDR equ 0xB8000
-SCREEN_CAPACITY equ 2000
+SCREEN_ROWS equ 25
+SCREEN_COLS equ 80
+SCREEN_CAPACITY equ SCREEN_ROWS * SCREEN_COLS
 WHITE_ON_BLACK equ 0x0F
 
 ; Static variable to hold our offset into the video memory
@@ -17,43 +19,89 @@ _print_offset: dw 0
 kprint: 
     pushad
 
+    ; If the input is a null pointer, do nothing
+    cmp esi, 0
+    je .finished
+
     ; All text will be printed as white on black for now
     mov ah, WHITE_ON_BLACK
 
     ; ebx will hold our offset
     xor ebx, ebx
 
-.print_loop:
-    ; Load a character from esi register into al 
-    lodsb 
+    ; Load a character and break if it's null (the end of the string)
+    .print_loop:
+        lodsb 
 
-    ; If the character is null (the end of the string) jump to the end of the routine
-    or al, al
-    jz .print_done
+        cmp al, 0
+        je .finished
+
+
+    ; If there is enugh room on the screen for the next character, just print it. Otherwise, scroll the screen first
+    .scroll_if_needed:
+        mov bx, [_print_offset]
+        cmp bx, SCREEN_CAPACITY 
+        jne .print_char
+
+        call scroll_screen
+        mov bx, SCREEN_COLS * (SCREEN_ROWS - 1)
 
     ; Calculate the correct offset into the video memory and move the character
-    mov bx, [_print_offset]
-    mov [ebx * 2 + VIDEO_MEMORY_ADDR], ax
+    .print_char:
+        mov [ebx * 2 + VIDEO_MEMORY_ADDR], ax
 
-    ; Increment the print offset
-    inc bx
+    ; Increment the print offset, store it back into memory, and continue
+    .continue_loop:
+        inc bx
+        mov [_print_offset], bx
+        jmp .print_loop
 
-    ; Check if we reached the end of the video memory
-    cmp bx, SCREEN_CAPACITY
-    jne .continue_loop
+    .finished:
+        popad
+        ret
 
-.reset_offset:
-    ; Reset if reached the end of the video text buffer
-    mov bx, 0
+;
+; Prints a given string into the VGA video memory in text mode and moves the cursor down to the next line
+; @input esi - Pointer to the string to print (null terminated)
+;
+kprintln:
+    pushad
 
-.continue_loop:
-    ; Store the offset back into memory and continue
-    mov [_print_offset], bx
-    jmp .print_loop
+    ; Print the string
+    call kprint
 
-.print_done:
-    popad
-    ret
+     ; If we're at the end of the text buffer, only scroll. Otherwise, move cursor to start of next line
+    mov ax, [_print_offset]
+    cmp ax, SCREEN_CAPACITY
+    jne .move_cursor
+
+    ; Scroll the screen and keep cursor at end of buffer
+    .scroll:
+        call scroll_screen
+        jmp .finished
+
+    ; Move the cursor to the start of the next line
+    .move_cursor:
+        ; Calculate the index into the current line
+        ; dx := _print_offset % SCREEN_COLS
+        xor dx, dx
+        mov ax, [_print_offset]
+        mov bx, SCREEN_COLS
+        div bx
+
+        ; Calculate the number of remaining characters in the current line
+        ; bx := 80 - (_print_offset % 80)
+        sub bx, dx
+
+        ; Move the print offset to the next line
+        ; _print_offset += 80 - (_print_offset % 80)
+        mov ax, [_print_offset]
+        add ax, bx
+        mov word [_print_offset], ax
+
+    .finished:
+        popad
+        ret
 
 ;
 ; Prints a byte as hex ("0x??")
@@ -113,79 +161,44 @@ byte_to_hex:
     .table: db "0123456789ABCDEF"
 
 ;
-; Prints a given string into the VGA video memory in text mode and moves the cursor down to the next line
-; @input esi - Pointer to the string to print (null terminated)
-;
-kprintln:
-    pushad
-
-    ; Print the string
-    call kprint
-
-    ; Calculate the index into the current line
-    ; dx := _print_offset % 80
-    xor dx, dx
-    mov ax, [_print_offset]
-    mov bx, 80
-    div bx
-
-    ; Calculate the number of remaining characters in the current line
-    ; bx := 80 - (_print_offset % 80)
-    sub bx, dx
-
-    ; Move the print offset to the next line
-    ; _print_offset += 80 - (_print_offset % 80)
-    mov ax, [_print_offset]
-    add ax, bx
-
-    ; Reset the offset if we reached the end of the screen
-    cmp ax, SCREEN_CAPACITY
-    jl .store_offset
-
-    .reset_offset:
-        mov ax, 0
-
-    .store_offset:
-        mov [_print_offset], ax
-
-    popad
-    ret
-
-;
-; Prints an empty line
-;
-kprint_empty_line:
-    push esi
-
-    mov esi, .empty_str
-    call kprintln
-
-    pop esi
-    ret
-
-    .empty_str: db 0
-
-;
 ; Function to clear the entire video buffer
 ;
 clear_screen:
     pushad
 
-    ; Clear upper bits of EDI (counter)
-    xor edi, edi
+    mov edi, 0
 
 .clear_loop:
     ; Use di as an index into the video memory clearing 1 char (2 bytes) at a time
-    mov word [edi * 2 + VIDEO_MEMORY_ADDR], 0
+    mov word [edi * 2 + VIDEO_MEMORY_ADDR], 0x0000
 
     ; Increment the counter
-    inc di
+    inc edi
 
     ; Check if we reached the end of the video memory
-    cmp di, SCREEN_CAPACITY
+    cmp edi, SCREEN_CAPACITY
     jne .clear_loop
 
 .clear_done:
+    popad
+    ret
+
+;
+; Scrolls the screen by one line
+;
+scroll_screen:
+    pushad
+
+    mov eax, 0
+    lea eax, [VIDEO_MEMORY_ADDR + eax] ; dest
+
+    mov ebx, SCREEN_COLS * 2
+    lea ebx, [VIDEO_MEMORY_ADDR + ebx] ; src
+
+    mov ecx, SCREEN_COLS * (SCREEN_ROWS - 1) * 2 ; num
+
+    call memcpy
+
     popad
     ret
 
