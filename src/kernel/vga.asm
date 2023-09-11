@@ -70,7 +70,7 @@ kprintln:
     ; Print the string
     call kprint
 
-     ; If we're at the end of the text buffer, only scroll. Otherwise, move cursor to start of next line
+    ; If we're at the end of the text buffer, only scroll. Otherwise, move cursor to start of next line
     mov ax, [_print_offset]
     cmp ax, SCREEN_CAPACITY
     jne .move_cursor
@@ -189,6 +189,7 @@ clear_screen:
 scroll_screen:
     pushad
 
+    ; memcpy the last 24 rows up
     mov eax, 0
     lea eax, [VIDEO_MEMORY_ADDR + eax] ; dest
 
@@ -198,6 +199,16 @@ scroll_screen:
     mov ecx, SCREEN_COLS * (SCREEN_ROWS - 1) * 2 ; num
 
     call memcpy
+
+    ; memset the bottom row to 0
+    mov eax, SCREEN_COLS * (SCREEN_ROWS - 1) * 2
+    lea eax, [VIDEO_MEMORY_ADDR + eax] ; ptr
+
+    mov bl, 0 ; value
+
+    mov ecx, SCREEN_COLS * 2 ; num
+
+    call memset
 
     popad
     ret
