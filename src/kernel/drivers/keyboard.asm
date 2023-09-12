@@ -3,6 +3,12 @@
 
 %include "vga.asm"
 
+;
+; A basic driver for interacting with PS/2 Keyboards
+;
+; https://wiki.osdev.org/PS2_Keyboard#Driver_Model
+;
+
 KEYBOARD_PORT equ 0x60
 
 ; Possible driver states
