@@ -213,4 +213,20 @@ scroll_screen:
     popad
     ret
 
+;
+; Prints an error message and halts the processor
+; @input esi - Pointer to the error message to print (null terminated)
+;
+kpanic:
+    ; Disable interrupts
+    cli
+
+    ; Print the error message
+    call kprintln
+
+    ; Halt the processor
+    .halt:
+        hlt
+        jmp .halt
+
 %endif
