@@ -7,6 +7,12 @@ BUILD_DIR=build
 all: floppy_image
 
 #
+# Remove all build artifacts
+#
+clean: 
+	rm -rf $(BUILD_DIR)
+
+#
 # Floppy Image
 #
 floppy_image: $(BUILD_DIR)/main.img
