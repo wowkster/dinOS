@@ -217,16 +217,71 @@ scroll_screen:
 ; Prints an error message and halts the processor
 ; @input esi - Pointer to the error message to print (null terminated)
 ;
-kpanic:
+__kpanic:
     ; Disable interrupts
     cli
 
+    mov esi, .panic_msg
+    call kprint
+
     ; Print the error message
+    mov esi, eax
+    call kprintln
+
+    ; Print "    at "
+    mov esi, .panic_at
+    call kprint
+
+    ; Print the file name
+    mov esi, ebx
+    call kprint
+
+    ; Print ":"
+    mov esi, .panic_colon
+    call kprint
+
+    ; Print the function name
+    mov esi, ecx
+    call kprint
+
+    ; Print ":"
+    mov esi, .panic_colon
+    call kprint
+
+    ; Print the line number
+    mov esi, edx
     call kprintln
 
     ; Halt the processor
     .halt:
         hlt
         jmp .halt
+
+    .panic_msg: db "KERNEL PANIC: ", 0
+    .panic_at: db "    at ", 0
+    .panic_colon: db ":", 0
+
+%macro __kpanic_macro 4
+    mov eax, %%panic_message
+    mov ebx, %%file_name
+    mov ecx, %%function_name
+    mov edx, %%line_number
+    call __kpanic
+
+    %%function_name:
+        db %1, 0
+
+    %%panic_message:
+        db %2, 0
+
+    %%file_name:
+        db %3, 0
+
+    %%line_number:
+        db %4, 0
+%endmacro
+
+%define kpanic(function_name, panic_message) \
+    __kpanic_macro function_name, panic_message, __FILE__, %str(__LINE__)
 
 %endif

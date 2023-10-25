@@ -11,10 +11,7 @@
 isr_exception:
     cli
 
-    mov esi, .exception_msg
-    call kpanic
-
-    .exception_msg: db 'Unhandled Exception! Halting...', 0
+    kpanic('isr_exception', 'Unhandled Exception! Halting...')
 
 ;
 ; Interrupt Service Routine for keyboard interrupts
@@ -36,9 +33,6 @@ isr_keyboard:
 ; Handler for spurious interrupts
 ;
 isr_spurious_interrupt:
-    mov si, .spurious_msg
-    call kpanic
-
-    .spurious_msg: db 'Caught spurious interrupt!', 0
+    kpanic('isr_spurious_interrupt', 'Caught spurious interrupt!')
 
 %endif
