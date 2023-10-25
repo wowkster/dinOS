@@ -18,11 +18,11 @@ STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE equ 2         ; First byte was 0xE0 and se
 STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE equ 3          ; First byte was 0xE1
 
 ; Static variable to hold the driver state
-_driver_state: db 0
+_kb_driver_state: db 0
 
 ; Buffer to hold the scan codes we've recieved (used to decode multibyte scan codes)
-_scan_code_buffer: times 6 db 0  ; Static 6 byte buffer to hold all the recieved scan codes
-_scan_code_buffer_idx: db 0      ; Static index into the scan code buffer (points to next available space in buffer)
+_kb_scan_code_buffer: times 6 db 0  ; Static 6 byte buffer to hold all the recieved scan codes
+_kb_scan_code_buffer_idx: db 0      ; Static index into the scan code buffer (points to next available space in buffer)
 
 ;
 ; Handler for keyboard interrupts as they come in from the PS/2 controller
@@ -35,10 +35,10 @@ keyboard_driver_handle_interrupt:
     in al, KEYBOARD_PORT
 
     ; Store the scan code into the scan buffer
-    call keyboard_driver_store_scan_code_byte
+    call kb_store_scan_code_byte
 
     ; Compute the next state of the driver based on the value in the scan buffer
-    call keyboard_driver_process_scan_code_buffer
+    call kb_process_scan_code_buffer
 
     pop esi
     pop eax
@@ -48,17 +48,17 @@ keyboard_driver_handle_interrupt:
 ; Stores the requested scan code into the scan buffer for processing
 ; @input al - scan code
 ;
-keyboard_driver_store_scan_code_byte:
+kb_store_scan_code_byte:
     pushad
 
     ; Store the scan code byte into the next available slot in the buffer
     mov ebx, 0
-    mov byte bl, [_scan_code_buffer_idx]
-    mov byte [_scan_code_buffer + ebx], al
+    mov byte bl, [_kb_scan_code_buffer_idx]
+    mov byte [_kb_scan_code_buffer + ebx], al
 
     ; Increment the buffer index
     inc ebx
-    mov byte [_scan_code_buffer_idx], bl
+    mov byte [_kb_scan_code_buffer_idx], bl
 
     popad
     ret
@@ -68,12 +68,12 @@ keyboard_driver_store_scan_code_byte:
 ;
 ; This is where invalid scan codes are discarded
 ;
-keyboard_driver_process_scan_code_buffer:
+kb_process_scan_code_buffer:
     pushad
 
     ; Get the length of the scan code buffer
     mov ebx, 0
-    mov byte bl, [_driver_state]
+    mov byte bl, [_kb_driver_state]
     
     ; Branch to the correct case based on its length
     .branch_to_buffer_len_case:
@@ -92,12 +92,12 @@ keyboard_driver_process_scan_code_buffer:
     ; When the state is STATE_DEFAULT, there is always only 1 byte in the buffer
     .state_default:
         ; Check if the first byte is a valid single byte scan code
-        call keyboard_driver_is_one_byte_scancode_valid
+        call kb_is_one_byte_scancode_valid
         je .one_byte_complete
 
         ; If the first byte is the start of an extended multibyte scan code,
         ; determine the new state and then wait for more bytes
-        mov byte al, [_scan_code_buffer]
+        mov byte al, [_kb_scan_code_buffer]
 
         ; Could be the start of a 2 byte scan code or a 4 byte scan code
         cmp al, 0xE0
@@ -108,34 +108,34 @@ keyboard_driver_process_scan_code_buffer:
         je .move_to_six_byte_state
 
         ; If neither cases matched, the scan code must be invalid
-        je .reset_scan_code_buffer
+        je .reset_kb_scan_code_buffer
 
         .move_to_two_or_four_byte_state:
             mov bl, STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE
-            mov byte [_driver_state], bl
+            mov byte [_kb_driver_state], bl
             jmp .finished
 
         .move_to_six_byte_state:
             mov bl, STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE
-            mov byte [_driver_state], bl
+            mov byte [_kb_driver_state], bl
             je .finished
 
         .one_byte_complete:
             ; Handle the 1 byte scan code
-            call keyboard_driver_handle_complete_one_byte_scan_code
-            jmp .reset_scan_code_buffer
+            call kb_handle_complete_one_byte_scan_code
+            jmp .reset_kb_scan_code_buffer
 
     ; When the state is STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE, there are
     ; always 2 bytes in the buffer and the first byte is always 0xE0
     .state_waiting_for_two_or_four_byte_scan_code:
         ; Check if the first 2 bytes are a valid single byte scan code
-        call keyboard_driver_is_two_byte_scancode_valid
+        call kb_is_two_byte_scancode_valid
         je .two_byte_complete
 
         ; If the first 2 bytes themselves are not a valid scan code, it could
         ; be the start of a 4 byte scan code. The second byte of a 4 byte scan
         ; code must be either 0x2A or 0xB7
-        mov byte al, [_scan_code_buffer + 1]
+        mov byte al, [_kb_scan_code_buffer + 1]
 
         cmp al, 0x2A
         je .move_to_four_byte_state
@@ -144,27 +144,27 @@ keyboard_driver_process_scan_code_buffer:
         je .move_to_four_byte_state
 
         ; If neither cases matched, the scan code must be invalid
-        jmp .reset_scan_code_buffer
+        jmp .reset_kb_scan_code_buffer
 
         .move_to_four_byte_state:
             mov bl, STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE
-            mov byte [_driver_state], bl
+            mov byte [_kb_driver_state], bl
             jmp .finished
 
         .two_byte_complete:
             ; Reset the state
             mov bl, STATE_DEFAULT
-            mov byte [_driver_state], bl
+            mov byte [_kb_driver_state], bl
 
             ; Handle the 2 byte scan code
-            call keyboard_driver_handle_complete_two_byte_scan_code
-            jmp .reset_scan_code_buffer
+            call kb_handle_complete_two_byte_scan_code
+            jmp .reset_kb_scan_code_buffer
 
     ; When the state is STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE, there are either
     ; 3 or 4 bytes in the scan code buffer
     .state_waiting_for_four_byte_scan_code:       
         ; Get the current buffer length and branch
-        mov byte cl, [_scan_code_buffer_idx] 
+        mov byte cl, [_kb_scan_code_buffer_idx] 
         
         cmp cl, 3
         je .three_byte_case        
@@ -174,37 +174,37 @@ keyboard_driver_process_scan_code_buffer:
 
         .three_byte_case:
             ; Get the third byte of the scan code buffer
-            mov byte al, [_scan_code_buffer + 2]
+            mov byte al, [_kb_scan_code_buffer + 2]
             
             ; The 3rd byte must always be 0xE0
             cmp al, 0xE0
             je .finished
 
             ; Any other values are invalid
-            jmp .reset_scan_code_buffer
+            jmp .reset_kb_scan_code_buffer
 
         .four_byte_case:
             ; If there are 4 bytes, check if the current scan code is a valid 4 byte scan code
-            call keyboard_driver_is_four_byte_scancode_valid
+            call kb_is_four_byte_scancode_valid
             je .four_byte_complete
 
             ; If the value is invalid, throw it away and ignore it
-            jmp .reset_scan_code_buffer
+            jmp .reset_kb_scan_code_buffer
 
         .four_byte_complete:
             ; Reset the state
             mov bl, STATE_DEFAULT
-            mov byte [_driver_state], bl
+            mov byte [_kb_driver_state], bl
 
             ; Handle the 4 byte scan code
-            call keyboard_driver_handle_complete_four_byte_scan_code
-            jmp .reset_scan_code_buffer
+            call kb_handle_complete_four_byte_scan_code
+            jmp .reset_kb_scan_code_buffer
 
     ; When the state is STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE, there can be
     ; anywhere from 2 to 6 bytes in the scan code buffer
     .state_waiting_for_six_byte_scan_code:
         ; Get the current buffer length and branch
-        mov byte cl, [_scan_code_buffer_idx] 
+        mov byte cl, [_kb_scan_code_buffer_idx] 
 
         ; If there are less than 6 bytes in the buffer, just keep reading
         ; We could short circuit if we get an invalid scan code but thats a lot of work
@@ -214,25 +214,25 @@ keyboard_driver_process_scan_code_buffer:
         .six_byte_case:
             ; Check to make sure that the 6 bytes in the scan code buffer make 
             ; a valid scan code (pause pressed)
-            call keyboard_driver_is_six_byte_scancode_valid
+            call kb_is_six_byte_scancode_valid
             je .six_byte_complete
 
             ; If the value is invalid, throw it away and ignore it
-            jmp .reset_scan_code_buffer
+            jmp .reset_kb_scan_code_buffer
 
         .six_byte_complete:
             ; Reset the state
             mov bl, STATE_DEFAULT
-            mov byte [_driver_state], bl
+            mov byte [_kb_driver_state], bl
 
             ; Handle the 6 byte scan code
-            call keyboard_driver_handle_complete_six_byte_scan_code
-            jmp .reset_scan_code_buffer
+            call kb_handle_complete_six_byte_scan_code
+            jmp .reset_kb_scan_code_buffer
 
     ; Reset scan code buffer
-    .reset_scan_code_buffer:
+    .reset_kb_scan_code_buffer:
         mov bl, 0
-        mov byte [_scan_code_buffer_idx], bl
+        mov byte [_kb_scan_code_buffer_idx], bl
 
     .finished:
         popad
@@ -264,11 +264,11 @@ keyboard_driver_process_scan_code_buffer:
 ;
 ; Checks to see if a single byte scan code is within the valid range(s)
 ;
-keyboard_driver_is_one_byte_scancode_valid:
+kb_is_one_byte_scancode_valid:
     pushad
 
     ; Get the first byte in the buffer
-    mov byte al, [_scan_code_buffer]
+    mov byte al, [_kb_scan_code_buffer]
 
     ; cl = byte index into the table
     mov ecx, 0
@@ -339,12 +339,12 @@ keyboard_driver_is_one_byte_scancode_valid:
 ;
 ; Checks to see if a two byte scan code is within the valid range(s)
 ;
-keyboard_driver_is_two_byte_scancode_valid:
+kb_is_two_byte_scancode_valid:
     pushad
 
     ; Get the first 2 bytes in the buffer
-    mov byte ah, [_scan_code_buffer]
-    mov byte al, [_scan_code_buffer + 1]
+    mov byte ah, [_kb_scan_code_buffer]
+    mov byte al, [_kb_scan_code_buffer + 1]
 
     ; All valid 2 byte scan codes start with 0xe0
     cmp ah, 0xe0
@@ -419,11 +419,11 @@ keyboard_driver_is_two_byte_scancode_valid:
 ;
 ; Checks to see if a four byte scan code is within the valid range
 ;
-keyboard_driver_is_four_byte_scancode_valid:
+kb_is_four_byte_scancode_valid:
     pushad
 
-    mov byte al, [_scan_code_buffer + 1]
-    mov byte ah, [_scan_code_buffer + 3]
+    mov byte al, [_kb_scan_code_buffer + 1]
+    mov byte ah, [_kb_scan_code_buffer + 3]
 
     cmp al, 0x2A
     je .print_screen_pressed
@@ -454,26 +454,26 @@ keyboard_driver_is_four_byte_scancode_valid:
 ;
 ; Checks to see if a six byte scan code is within the valid range
 ;
-keyboard_driver_is_six_byte_scancode_valid:
+kb_is_six_byte_scancode_valid:
     pushad
 
-    mov byte al, [_scan_code_buffer + 1]
+    mov byte al, [_kb_scan_code_buffer + 1]
     cmp al, 0x1D
     jne .not_matched
 
-    mov byte al, [_scan_code_buffer + 2]
+    mov byte al, [_kb_scan_code_buffer + 2]
     cmp al, 0x45
     jne .not_matched
 
-    mov byte al, [_scan_code_buffer + 3]
+    mov byte al, [_kb_scan_code_buffer + 3]
     cmp al, 0xE1
     jne .not_matched
 
-    mov byte al, [_scan_code_buffer + 4]
+    mov byte al, [_kb_scan_code_buffer + 4]
     cmp al, 0x9D
     jne .not_matched
 
-    mov byte al, [_scan_code_buffer + 5]
+    mov byte al, [_kb_scan_code_buffer + 5]
     cmp al, 0xC5
     jne .not_matched
 
@@ -490,10 +490,10 @@ keyboard_driver_is_six_byte_scancode_valid:
 ;
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
-keyboard_driver_handle_complete_one_byte_scan_code:
+kb_handle_complete_one_byte_scan_code:
     pushad
 
-    mov byte al, [_scan_code_buffer]
+    mov byte al, [_kb_scan_code_buffer]
 
     ; Print the start of the message
     mov esi, .message
@@ -516,7 +516,7 @@ keyboard_driver_handle_complete_one_byte_scan_code:
 ;
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
-keyboard_driver_handle_complete_two_byte_scan_code:
+kb_handle_complete_two_byte_scan_code:
     pushad
 
     ; Print the start of the message
@@ -524,7 +524,7 @@ keyboard_driver_handle_complete_two_byte_scan_code:
     call kprint
 
     ; Print the first byte to the screen
-    mov byte al, [_scan_code_buffer]
+    mov byte al, [_kb_scan_code_buffer]
     call kprint_byte
 
     ; Print a space
@@ -532,7 +532,7 @@ keyboard_driver_handle_complete_two_byte_scan_code:
     call kprint
 
     ; Print the second byte to the screen
-    mov byte al, [_scan_code_buffer + 1]
+    mov byte al, [_kb_scan_code_buffer + 1]
     call kprint_byte
 
     ; Print a new line
@@ -550,7 +550,7 @@ keyboard_driver_handle_complete_two_byte_scan_code:
 ;
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
-keyboard_driver_handle_complete_four_byte_scan_code:
+kb_handle_complete_four_byte_scan_code:
     pushad
 
     ; Print the start of the message
@@ -558,7 +558,7 @@ keyboard_driver_handle_complete_four_byte_scan_code:
     call kprint
 
     ; Print the first byte to the screen
-    mov byte al, [_scan_code_buffer]
+    mov byte al, [_kb_scan_code_buffer]
     call kprint_byte
 
     ; Print a space
@@ -566,7 +566,7 @@ keyboard_driver_handle_complete_four_byte_scan_code:
     call kprint
 
     ; Print the second byte to the screen
-    mov byte al, [_scan_code_buffer + 1]
+    mov byte al, [_kb_scan_code_buffer + 1]
     call kprint_byte
 
     ; Print a space
@@ -574,7 +574,7 @@ keyboard_driver_handle_complete_four_byte_scan_code:
     call kprint
 
     ; Print the third byte to the screen
-    mov byte al, [_scan_code_buffer + 2]
+    mov byte al, [_kb_scan_code_buffer + 2]
     call kprint_byte
 
     ; Print a space
@@ -582,7 +582,7 @@ keyboard_driver_handle_complete_four_byte_scan_code:
     call kprint
 
     ; Print the fourth byte to the screen
-    mov byte al, [_scan_code_buffer + 3]
+    mov byte al, [_kb_scan_code_buffer + 3]
     call kprint_byte
 
     ; Print a new line
@@ -600,7 +600,7 @@ keyboard_driver_handle_complete_four_byte_scan_code:
 ;
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
-keyboard_driver_handle_complete_six_byte_scan_code:
+kb_handle_complete_six_byte_scan_code:
     pushad
 
     ; Print the start of the message
@@ -608,7 +608,7 @@ keyboard_driver_handle_complete_six_byte_scan_code:
     call kprint
 
     ; Print the first byte to the screen
-    mov byte al, [_scan_code_buffer]
+    mov byte al, [_kb_scan_code_buffer]
     call kprint_byte
 
     ; Print a space
@@ -616,7 +616,7 @@ keyboard_driver_handle_complete_six_byte_scan_code:
     call kprint
 
     ; Print the second byte to the screen
-    mov byte al, [_scan_code_buffer + 1]
+    mov byte al, [_kb_scan_code_buffer + 1]
     call kprint_byte
 
     ; Print a space
@@ -624,7 +624,7 @@ keyboard_driver_handle_complete_six_byte_scan_code:
     call kprint
 
     ; Print the third byte to the screen
-    mov byte al, [_scan_code_buffer + 2]
+    mov byte al, [_kb_scan_code_buffer + 2]
     call kprint_byte
 
     ; Print a space
@@ -632,7 +632,7 @@ keyboard_driver_handle_complete_six_byte_scan_code:
     call kprint
 
     ; Print the fourth byte to the screen
-    mov byte al, [_scan_code_buffer + 3]
+    mov byte al, [_kb_scan_code_buffer + 3]
     call kprint_byte
 
     ; Print a space
@@ -640,7 +640,7 @@ keyboard_driver_handle_complete_six_byte_scan_code:
     call kprint
 
     ; Print the fifth byte to the screen
-    mov byte al, [_scan_code_buffer + 4]
+    mov byte al, [_kb_scan_code_buffer + 4]
     call kprint_byte
 
     ; Print a space
@@ -648,7 +648,7 @@ keyboard_driver_handle_complete_six_byte_scan_code:
     call kprint
 
     ; Print the sixth byte to the screen
-    mov byte al, [_scan_code_buffer + 5]
+    mov byte al, [_kb_scan_code_buffer + 5]
     call kprint_byte
 
     ; Print a new line
