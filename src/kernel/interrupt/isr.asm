@@ -30,7 +30,7 @@ isr_keyboard:
     call keyboard_driver_handle_interrupt
 
     ; Acknowledge PIC IRQ
-    mov ah, 1
+    mov ah, IRQ_KEYBAORD
     call pic_send_eoi
 
     pop eax

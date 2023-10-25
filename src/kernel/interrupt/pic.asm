@@ -63,6 +63,9 @@ OCW3_ESMM equ 0x40  ; Enable Special Mask Mode
 OCW3_READ_ISR_CMD equ OCW3_CMD | OCW3_RR | OCW3_RIS ; Reads the In-Service Register (ISR)
 OCW3_READ_IRR_CMD equ OCW3_CMD | OCW3_RR            ; Reads the Interrupt Request Register (IRR)
 
+; IRQ Numbers
+IRQ_KEYBAORD equ 1
+
 ;
 ; Wait a very small amount of time (1 to 4 microseconds, generally). Useful for
 ; implementing a small delay for PIC remapping on old hardware or generally as

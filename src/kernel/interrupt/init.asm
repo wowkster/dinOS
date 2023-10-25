@@ -22,7 +22,7 @@ init_interrupts:
     call pic_disable_all
 
     ; Enable Keyboard IRQ
-    mov al, 1
+    mov al, IRQ_KEYBAORD
     call pic_clear_mask
 
     ; Load our Interrupt Descriptor Table
