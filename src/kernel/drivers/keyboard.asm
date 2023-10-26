@@ -1005,6 +1005,7 @@ kb_cmd_rm_from_queue:
 ;
 kb_queue_command:
     pushad
+    pushf
     cli
 
     ; Enqueue the command
@@ -1022,7 +1023,7 @@ kb_queue_command:
     call kb_cmd_output_first_if_not_empty
 
     .finished:
-        sti
+        popf
         popad
         ret
 
@@ -1033,6 +1034,7 @@ kb_queue_command:
 ;
 kb_queue_command_with_data:
     pushad
+    pushf
     cli
 
     ; Enqueue the command
@@ -1054,7 +1056,7 @@ kb_queue_command_with_data:
     call kb_cmd_output_first_if_not_empty
 
     .finished:
-        sti
+        popf
         popad
         ret
 
