@@ -59,8 +59,6 @@ _kb_cmd_buffer_idx: db 0      ; Static index into the command buffer (points to 
 keyboard_driver_init:
     pushad
 
-    mkprintln("keyboard_driver_init")
-
     mov al, KB_CMD_ECHO
     call kb_queue_command
 
@@ -193,6 +191,10 @@ keyboard_driver_handle_interrupt:
 
         ; Compute the next state of the driver based on the value in the scan buffer
         call kb_process_scan_code_buffer
+
+        mov al, KB_CMD_SET_LEDS
+        mov bl, 0b0000_0100
+        call kb_queue_command_with_data
 
     .finished:
         pop esi

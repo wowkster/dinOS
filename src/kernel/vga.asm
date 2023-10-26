@@ -5,27 +5,42 @@
 %include "macros.asm"
 
 VIDEO_MEMORY_ADDR equ 0xB8000
+
 SCREEN_ROWS equ 25
 SCREEN_COLS equ 80
 SCREEN_CAPACITY equ SCREEN_ROWS * SCREEN_COLS
-WHITE_ON_BLACK equ 0x0F
+
+VGA_COLOR_FG_BLACK equ 0x00
+VGA_COLOR_FG_BLUE equ 0x01
+VGA_COLOR_FG_GREEN equ 0x02
+VGA_COLOR_FG_CYAN equ 0x03
+VGA_COLOR_FG_RED equ 0x04
+VGA_COLOR_FG_MAGENTA equ 0x05
+VGA_COLOR_FG_YELLOW equ 0x06
+VGA_COLOR_FG_LIGHT_GRAY equ 0x07
+VGA_COLOR_FG_DARK_GRAY equ 0x08
+VGA_COLOR_FG_BRIGHT_BLUE equ 0x09
+VGA_COLOR_FG_BRIGHT_GREEN equ 0x0A
+VGA_COLOR_FG_BRIGHT_CYAN equ 0x0B
+VGA_COLOR_FG_BRIGHT_RED equ 0x0C
+VGA_COLOR_FG_BRIGHT_MAGENTA equ 0x0D
+VGA_COLOR_FG_BRIGHT_YELLOW equ 0x0E
+VGA_COLOR_FG_WHITE equ 0x0F
 
 ; Static variable to hold our offset into the video memory
 _print_offset: dw 0
 
 ; 
-; Prints a given string into the VGA video memory in text mode
+; Prints a given string into the VGA video memory in text mode with the provided color
 ; @input esi - Pointer to the string to print (null terminated)
+; @input ah - Color byte to use when printing
 ;
-kprint: 
+kprint_color: 
     pushad
 
     ; If the input is a null pointer, do nothing
     cmp esi, 0
     je .finished
-
-    ; All text will be printed as white on black for now
-    mov ah, WHITE_ON_BLACK
 
     ; ebx will hold our offset
     xor ebx, ebx
@@ -60,6 +75,19 @@ kprint:
     .finished:
         popad
         ret
+
+; 
+; Prints a given string into the VGA video memory in text mode
+; @input esi - Pointer to the string to print (null terminated)
+;
+kprint:
+    pushad
+
+    mov ah, VGA_COLOR_FG_WHITE
+    call kprint_color
+
+    popad
+    ret  
 
 ;
 ; Prints a given string into the VGA video memory in text mode and moves the cursor down to the next line

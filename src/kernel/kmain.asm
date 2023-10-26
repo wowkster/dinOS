@@ -3,18 +3,32 @@ org 0x10000
 
 %include "macros.asm"
 
+%define enumerate_driver_init_functions(O) \
+    O keyboard_driver_init
+
+%macro call_with_ok 1
+    mkprint(%str(%1))
+    mkprint('...')
+
+    call %1
+    mkprintln_ok()
+%endmacro
+
 kmain:
     .clear_vga_buffer:
         call clear_screen
 
-    mkprintln('dinOS v0.0.1-beta')
-    mkprintln('Interrupts initialized!')
-    
-    .enable_interrupts:
-        call init_interrupts
+    ; Kernel boot message
+    mkprint('dinOS version 0.0.1-beta-x86 (nasm version ')
+    mkprint(nasm_version)
+    mkprintln(')')
+    mkprintln()
 
-    .init_drivers:
-        call keyboard_driver_init
+    ; Initialize interrupts    
+    call_with_ok init_interrupts
+
+    ; Initialize drivers
+    enumerate_driver_init_functions(call_with_ok)
 halt:
     ; Halt the processor
     hlt
