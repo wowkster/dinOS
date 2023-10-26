@@ -38,6 +38,17 @@ KB_CMD_SET_DEFAULT_PARAMS equ 0xF6
 KB_CMD_RESEND equ 0xFE
 KB_CMD_RESET_SELF_TEST equ 0xFF
 
+; Set LED Data
+KB_CMD_DATA_LED_SCROLL_LOCK equ 0b0000_0001
+KB_CMD_DATA_LED_NUM_LOCK equ 0b0000_0010
+KB_CMD_DATA_LED_CAPS_LOCK equ 0b0000_0100
+
+; Get/Set Scan Code Data
+KB_CMD_DATA_GET_SCAN_CODE equ 0x00
+KB_CMD_DATA_SET_SCAN_CODE_1 equ 0x01
+KB_CMD_DATA_SET_SCAN_CODE_2 equ 0x02
+KB_CMD_DATA_SET_SCAN_CODE_3 equ 0x03
+
 ; PS/2 Keyboard Responses
 ; https://wiki.osdev.org/PS/2_Keyboard#Commands
 KB_RESPONSE_ERROR_1 equ 0x00
@@ -65,15 +76,15 @@ keyboard_driver_init:
     mov al, KB_CMD_RESET_SELF_TEST
     call kb_queue_command
 
+    mov al, KB_CMD_SCAN_CODE_SET
+    mov bl, KB_CMD_DATA_SET_SCAN_CODE_1
+    call kb_queue_command_with_data
+
     mov al, KB_CMD_DISABLE_SCANNING
     call kb_queue_command
 
     mov al, KB_CMD_ENABLE_SCANNING
     call kb_queue_command
-
-    mov al, KB_CMD_SET_LEDS
-    mov bl, 0b0000_0100
-    call kb_queue_command_with_data
 
     call kb_wait_for_empty_command_queue
 
@@ -191,10 +202,6 @@ keyboard_driver_handle_interrupt:
 
         ; Compute the next state of the driver based on the value in the scan buffer
         call kb_process_scan_code_buffer
-
-        mov al, KB_CMD_SET_LEDS
-        mov bl, 0b0000_0100
-        call kb_queue_command_with_data
 
     .finished:
         pop esi
