@@ -146,7 +146,7 @@ kprint_byte:
     mov byte [.template + 2], ah
     mov byte [.template + 3], al
 
-    mov si, .template
+    mov esi, .template
     call kprint
 
     popad
