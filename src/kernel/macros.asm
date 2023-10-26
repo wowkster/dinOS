@@ -2,8 +2,12 @@
 %define MACROS_ASM
 
 %macro __mkprint_macro 1
+    push esi
+
     mov esi, %%data
     call kprint
+
+    pop esi
     jmp %%finished
 
     %%data:
@@ -16,16 +20,24 @@
     __mkprint_macro string
 
 %macro __mkprintln_macro 0
+    push esi
+
     mov esi, 0
     call kprintln
+
+    pop esi
 %endmacro
 
 %define mkprintln() \
     __mkprintln_macro
 
 %macro __mkprintln_macro 1
+    push esi
+
     mov esi, %%data
     call kprintln
+
+    pop esi
     jmp %%finished
 
     %%data:
@@ -39,12 +51,18 @@
     __mkprintln_macro string
 
 %macro __mkprintln_ok_macro 0
+    push esi
+    push eax
+
     mov esi, %%msg
     mov ah, VGA_COLOR_FG_BRIGHT_GREEN
     call kprint_color
     
     mov esi, 0
     call kprintln
+    
+    pop eax
+    pop esi
     jmp %%finished
 
     %%msg:
