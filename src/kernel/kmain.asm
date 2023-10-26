@@ -12,7 +12,6 @@ kmain:
     
     .enable_interrupts:
         call init_interrupts
-    
 
     .init_drivers:
         call keyboard_driver_init
