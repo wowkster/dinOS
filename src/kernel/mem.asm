@@ -120,5 +120,60 @@ memset:
     .finished:
         popad
         ret
-        
+
+;
+; Sets the first num words of the block of memory pointed by ptr to the specified value
+; @input eax - ptr
+; @input bx - value
+; @input ecx - num
+;
+memset_16:
+    pushad
+
+    ; Internally we can optimize this function by setting 4 bytes at a time instead of 2
+
+    ; edx = ecx % 2
+    ; i.e. Number of individual words that need to be set
+    mov edx, ecx
+    and edx, 0b0000_0001 ; either 0 or 1
+
+    ; ecx = (ecx - (ecx % 2)) / 2
+    ; i.e. Number of dwords that need to be set
+    sub ecx, edx
+    shr ecx, 1
+
+    .set_dwords_if_needed:
+        mov edi, 0
+
+        ; Repeat bx into upper word of ebx
+        mov si, bx
+        shl ebx, 16
+        mov bx, si
+
+    .set_dword:
+        cmp edi, ecx
+        je .set_word_if_needed
+
+        ; Set dword
+        mov dword [eax + 4 * edi], ebx
+
+        inc edi
+        jmp .set_dword
+
+    .set_word_if_needed:
+        ; Add to ptr the number of bytes we copied so far
+        shl ecx, 2
+        add eax, ecx
+
+    .set_word:
+        cmp edx, 0
+        je .finished
+
+        ; Set word
+        mov word [eax], bx
+
+    .finished:
+        popad
+        ret
+
 %endif
