@@ -685,57 +685,15 @@ kb_is_six_byte_scancode_valid:
         ret
 
 ;
-; Macro to print a specified number of bytes from the scan code buffer
-; @input 1 - number of bytes to print
-;
-%macro print_scan_code 1
-    %assign i 0
-    %rep %1
-        mov byte al, [_kb_scan_code_buffer + i]
-        call kprint_byte
-
-        %if i != %1 - 1
-            mkprint(' ')
-        %endif
-
-        %assign i i+1
-    %endrep
-%endmacro
-
-;
 ; Processes a full single byte scan code
 ;
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
 kb_handle_complete_one_byte_scan_code:
-    pushad
-
-    mkprint('1 byte scan code: ')
-
-    print_scan_code 1
-
     call kb_translate_one_byte_scan_code_to_key_code
 
-    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
+    call kb_handle_key_code
 
-    call kprint_byte
-
-    mkprint(' (')
-
-    cmp ah, 1
-    je .key_released
-
-    .key_pressed:
-        mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
-        jmp .print_end
-
-    .key_released:
-        mkprint_color('released', VGA_COLOR_FG_BRIGHT_RED)
-
-    .print_end:
-        mkprintln(')')
-
-        popad
         ret
 
 ;
@@ -744,34 +702,10 @@ kb_handle_complete_one_byte_scan_code:
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
 kb_handle_complete_two_byte_scan_code:
-    pushad
-
-    mkprint('2 byte scan code: ')
-
-    print_scan_code 2
-
     call kb_translate_two_byte_scan_code_to_key_code
 
-    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
+    call kb_handle_key_code
 
-    call kprint_byte
-
-    mkprint(' (')
-
-    cmp ah, 1
-    je .key_released
-
-    .key_pressed:
-        mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
-        jmp .print_end
-
-    .key_released:
-        mkprint_color('released', VGA_COLOR_FG_BRIGHT_RED)
-
-    .print_end:
-        mkprintln(')')
-
-    popad
     ret
 
 ;
@@ -780,34 +714,10 @@ kb_handle_complete_two_byte_scan_code:
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
 kb_handle_complete_four_byte_scan_code:
-    pushad
-
-    mkprint('4 byte scan code: ')
-
-    print_scan_code 4
-
     call kb_translate_four_byte_scan_code_to_key_code
 
-    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
+    call kb_handle_key_code
 
-    call kprint_byte
-
-    mkprint(' (')
-
-    cmp ah, 1
-    je .key_released
-
-    .key_pressed:
-        mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
-        jmp .print_end
-
-    .key_released:
-        mkprint_color('released', VGA_COLOR_FG_BRIGHT_RED)
-
-    .print_end:
-        mkprintln(')')
-
-    popad
     ret
 
 ;
@@ -816,21 +726,10 @@ kb_handle_complete_four_byte_scan_code:
 ; Converts scan code into a key code and marks it in the key state buffer
 ;
 kb_handle_complete_six_byte_scan_code:
-    pushad
-
-    mkprint('6 byte scan code: ')
-
-    print_scan_code 6
-
     call kb_translate_two_byte_scan_code_to_key_code
 
-    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
+    call kb_handle_key_code
 
-    call kprint_byte
-
-    mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
-
-    popad
     ret
 
 ;
@@ -1424,6 +1323,161 @@ kb_translate_six_byte_scan_code_to_key_code:
     mov al, KB_KC_PAUSE
     mov ah, 0
 
+    ret
+
+; 256 bit buffer for storing the depression state of each key (0 = not pressed, 1 = pressed)
+_kb_key_pressed_state_buffer:
+    times 32 db 0
+
+;
+; Get the depression state of a key in the key state buffer
+; @input al - key code
+; @output zf - is pressed (0 = key is up, 1 = key is down)
+;
+kb_is_key_pressed:
+    pushad
+
+    ; cl = byte index into the table
+    mov ecx, 0
+    mov cl, al
+    shr cl, 3
+
+    ; bl = the byte from the table
+    mov byte bl, [_kb_key_pressed_state_buffer + ecx] 
+
+    ; cl = bit index into the byte
+    mov cl, al
+    and cl, 0b0000_0111 
+
+    ; Check if cl-th bit is set 
+    shr bl, cl
+    and bl, 1
+
+    ; If the result was 0, the bit was not set (the key is up)
+    jz .not_matched
+
+    jmp .matched
+
+    matchable
+
+    .finished:
+        popad
+        ret
+
+;
+; Set the key depression state for a key in the key state buffer
+; @input al - key code
+; @input ah - is pressed (0 = key is up, 1 = key is down)
+;
+kb_set_key_pressed:
+    pushad
+
+    ; dl = byte index into the table
+    mov edx, 0
+    mov dl, al
+    shr dl, 3
+
+    ; bl = the byte from the table
+    mov byte bl, [_kb_key_pressed_state_buffer + edx] 
+
+    ; cl = bit index into the byte
+    mov cl, al
+    and cl, 0b0000_0111 
+
+    cmp ah, 0
+    je .clear_bit
+
+    .set_bit:
+        shl ah, cl
+        or bl, ah
+
+        jmp .set_byte
+
+    .clear_bit:
+        mov ah, 1
+        shl ah, cl
+        not ah
+        and bl, ah
+
+    .set_byte:
+        mov byte [_kb_key_pressed_state_buffer + edx], bl
+
+    popad
+    ret
+
+;
+; Checks if either of the provided modifier keys are pressed
+; @output zf - is pressed (0 = key is up, 1 = key is down)
+;
+%macro create_is_modifier_pressed 2-*
+    kb_is_%{1}_pressed:
+        pushad
+
+        %rotate 1
+        %rep %0 - 1
+            mov al, %1
+            call kb_is_key_pressed
+            je .matched
+            
+            %rotate 1
+        %endrep
+
+        jmp .not_matched
+        
+        matchable
+
+        .finished:
+            popad
+            ret
+%endmacro
+
+create_is_modifier_pressed shift, KB_KC_LEFT_SHIFT, KB_KC_RIGHT_SHIFT
+create_is_modifier_pressed ctrl, KB_KC_LEFT_CTRL, KB_KC_RIGHT_CTRL
+create_is_modifier_pressed alt, KB_KC_LEFT_ALT, KB_KC_RIGHT_ALT
+
+;
+; Generic function called by scan code handlers after a scan code has been translated to a 1 byte key code
+; @input al - key code
+; @input ah - key state (0 = pressed, 1 = released)
+;
+kb_handle_key_code:
+    pushad
+
+    ; The KeyState enum is represented in the opposite way that keys are stored in the key pressed state buffer
+    ; i.e. KeyState::Pressed = 0 and KeyState::Released = 1 while the key pressed state buffer stores 0 = not pressed and 1 = pressed
+    xor ah, 1
+
+    ; Set the key state in the key state buffer
+    call kb_set_key_pressed
+
+    %macro print_pressed_state 0
+        je %%yes
+
+        %%no:
+            mkprint_color('not pressed', VGA_COLOR_FG_BRIGHT_RED)
+            jmp %%finished
+
+        %%yes:
+            mkprint_color('pressed    ', VGA_COLOR_FG_BRIGHT_GREEN)
+
+        %%finished:
+    %endmacro
+
+    mkprint('shift state = ')
+    call kb_is_shift_pressed
+    print_pressed_state
+
+    mkprint(' ctrl state = ')
+    call kb_is_ctrl_pressed
+    print_pressed_state
+
+    mkprint(' alt state = ')
+    call kb_is_alt_pressed
+    print_pressed_state
+
+    mkprintln()
+
+    popad
     ret
 
 %endif
