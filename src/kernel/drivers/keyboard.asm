@@ -13,10 +13,11 @@
 KEYBOARD_PORT equ 0x60
 
 ; Possible driver states
-KB_SC_STATE_DEFAULT equ 0                                 ; Default state before any scan codes are processed
-KB_SC_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE equ 1  ; First byte was 0xE0
-KB_SC_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE equ 2         ; First byte was 0xE0 and second byte was 0x2A or 0xB7
-KB_SC_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE equ 3          ; First byte was 0xE1
+KB_STATE_DEFAULT equ 0                                 ; Default state before any scan codes are processed
+KB_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE equ 1  ; First byte was 0xE0
+KB_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE equ 2         ; First byte was 0xE0 and second byte was 0x2A or 0xB7
+KB_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE equ 3          ; First byte was 0xE1
+KB_STATE_WAITING_FOR_COMMAND_RESPONSE equ 4               ; Waiting for a command response from the keyboard
 
 ; Static variable to hold the driver state
 _kb_driver_state: db 0
@@ -77,7 +78,7 @@ keyboard_driver_init:
     call kb_queue_command
 
     mov al, KB_CMD_SCAN_CODE_SET
-    mov bl, KB_CMD_DATA_SET_SCAN_CODE_1
+    mov ah, KB_CMD_DATA_SET_SCAN_CODE_1
     call kb_queue_command_with_data
 
     mov al, KB_CMD_DISABLE_SCANNING
@@ -96,47 +97,83 @@ keyboard_driver_init:
 ;
 keyboard_driver_handle_interrupt:
     push eax
-    push esi
+    push ebx
 
     ; Read in byte from the keyboard
     in al, KEYBOARD_PORT
 
-    ; Check if the response is an error
+    ; Check if the byte indicates an error
     cmp al, KB_RESPONSE_ERROR_1
     je .error
 
     cmp al, KB_RESPONSE_ERROR_2
     je .error
 
-    ; Check if the response is a self test pass
-    cmp al, KB_RESPONSE_SELF_TEST_PASS
-    je .command_self_test_pass
+    ; Get the driver state   
+    mov ebx, 0
+    mov byte bl, [_kb_driver_state]
 
-    ; Check if the response is a self test fail
-    cmp al, KB_RESPONSE_SELF_TEST_FAIL_1
-    je .command_self_test_fail
-
-    cmp al, KB_RESPONSE_SELF_TEST_FAIL_2
-    je .command_self_test_fail
-
-    ; Check if the byte is a command acknowledgement
-    cmp al, KB_RESPONSE_ACK
-    je .command_acknowledgement
-
-    ; Check if the byte is a command resend request
-    cmp al, KB_RESPONSE_RESEND
-    je .command_resend_request
-
-    ; Check if the byte is a command echo
-    cmp al, KB_RESPONSE_ECHO
-    je .command_echo
+    ; Branch to the correct case based on the driver state
+    cmp bl, KB_STATE_WAITING_FOR_COMMAND_RESPONSE
+    je .command_response
 
     jmp .scan_code
 
     .error:
         kpanic('keyboard_driver_handle_interrupt', 'Received keyboard error response!')
 
-    .command_self_test_pass:
+    .command_response:
+        ; Call out to helper to process the command response
+        call kb_handle_command_response
+
+        jmp .finished
+
+    .scan_code:
+        ; Store the scan code into the scan buffer
+        call kb_store_scan_code_byte
+
+        ; Compute the next state of the driver based on the value in the scan buffer
+        call kb_process_scan_code_buffer
+
+    .finished:
+        pop ebx
+        pop eax
+        ret
+
+;
+; Handles the logic for processing a command response from the keyboard
+; @input al - response byte
+;
+kb_handle_command_response:
+    pushad
+
+    ; Check if the response is a self test pass
+    cmp al, KB_RESPONSE_SELF_TEST_PASS
+    je .self_test_pass
+
+    ; Check if the response is a self test fail
+    cmp al, KB_RESPONSE_SELF_TEST_FAIL_1
+    je .self_test_fail
+
+    cmp al, KB_RESPONSE_SELF_TEST_FAIL_2
+    je .self_test_fail
+
+    ; Check if the byte is a command acknowledgement
+    cmp al, KB_RESPONSE_ACK
+    je .acknowledgement
+
+    ; Check if the byte is a command resend request
+    cmp al, KB_RESPONSE_RESEND
+    je .resend_request
+
+    ; Check if the byte is a command echo
+    cmp al, KB_RESPONSE_ECHO
+    je .echo
+
+    ; If none of the cases matched, something went wrong
+    kpanic('kb_handle_command_response', 'Keyboard command response error!')
+
+    .self_test_pass:
         call kb_cmd_peek_byte
 
         ; If the last command was not a self test, something went wrong
@@ -152,12 +189,12 @@ keyboard_driver_handle_interrupt:
         jmp .finished
 
         .self_test_error:
-            kpanic('keyboard_driver_handle_interrupt', 'Keyboard command self test error!')
+            kpanic('kb_handle_command_response', 'Keyboard command self test error!')
 
-    .command_self_test_fail:
-        kpanic('keyboard_driver_handle_interrupt', 'Keyboard self test failed!')
+    .self_test_fail:
+        kpanic('kb_handle_command_response', 'Keyboard self test failed!')
 
-    .command_acknowledgement:
+    .acknowledgement:
         call kb_cmd_peek_byte
 
         ; If the last command was not a self test, something went wrong
@@ -172,13 +209,13 @@ keyboard_driver_handle_interrupt:
 
         jmp .finished
 
-    .command_resend_request:
+    .resend_request:
         ; Resend the last command
         call kb_cmd_output_first_if_not_empty
 
         jmp .finished
 
-    .command_echo:
+    .echo:
         call kb_cmd_peek_byte
 
         ; If the last command was not an echo, something went wrong
@@ -194,18 +231,10 @@ keyboard_driver_handle_interrupt:
         jmp .finished
 
         .echo_error:
-            kpanic('keyboard_driver_handle_interrupt', 'Keyboard command echo error!')
-
-    .scan_code:
-        ; Store the scan code into the scan buffer
-        call kb_store_scan_code_byte
-
-        ; Compute the next state of the driver based on the value in the scan buffer
-        call kb_process_scan_code_buffer
+            kpanic('kb_handle_command_response', 'Keyboard command echo error!')
 
     .finished:
-        pop esi
-        pop eax
+        popad
         ret
 
 ;
@@ -241,19 +270,19 @@ kb_process_scan_code_buffer:
     
     ; Branch to the correct case based on its length
     .branch_to_buffer_len_case:
-        cmp bl, KB_SC_STATE_DEFAULT
+        cmp bl, KB_STATE_DEFAULT
         je .state_default
 
-        cmp bl, KB_SC_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE
+        cmp bl, KB_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE
         je .state_waiting_for_two_or_four_byte_scan_code
 
-        cmp bl, KB_SC_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE
+        cmp bl, KB_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE
         je .state_waiting_for_four_byte_scan_code
 
-        cmp bl, KB_SC_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE
+        cmp bl, KB_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE
         je .state_waiting_for_six_byte_scan_code
 
-    ; When the state is KB_SC_STATE_DEFAULT, there is always only 1 byte in the buffer
+    ; When the state is KB_STATE_DEFAULT, there is always only 1 byte in the buffer
     .state_default:
         ; Check if the first byte is a valid single byte scan code
         call kb_is_one_byte_scancode_valid
@@ -275,12 +304,12 @@ kb_process_scan_code_buffer:
         je .reset_kb_scan_code_buffer
 
         .move_to_two_or_four_byte_state:
-            mov bl, KB_SC_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE
+            mov bl, KB_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE
             mov byte [_kb_driver_state], bl
             jmp .finished
 
         .move_to_six_byte_state:
-            mov bl, KB_SC_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE
+            mov bl, KB_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE
             mov byte [_kb_driver_state], bl
             je .finished
 
@@ -289,7 +318,7 @@ kb_process_scan_code_buffer:
             call kb_handle_complete_one_byte_scan_code
             jmp .reset_kb_scan_code_buffer
 
-    ; When the state is KB_SC_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE, there are
+    ; When the state is KB_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE, there are
     ; always 2 bytes in the buffer and the first byte is always 0xE0
     .state_waiting_for_two_or_four_byte_scan_code:
         ; Check if the first 2 bytes are a valid single byte scan code
@@ -311,20 +340,20 @@ kb_process_scan_code_buffer:
         jmp .reset_kb_scan_code_buffer
 
         .move_to_four_byte_state:
-            mov bl, KB_SC_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE
+            mov bl, KB_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE
             mov byte [_kb_driver_state], bl
             jmp .finished
 
         .two_byte_complete:
             ; Reset the state
-            mov bl, KB_SC_STATE_DEFAULT
+            mov bl, KB_STATE_DEFAULT
             mov byte [_kb_driver_state], bl
 
             ; Handle the 2 byte scan code
             call kb_handle_complete_two_byte_scan_code
             jmp .reset_kb_scan_code_buffer
 
-    ; When the state is KB_SC_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE, there are either
+    ; When the state is KB_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE, there are either
     ; 3 or 4 bytes in the scan code buffer
     .state_waiting_for_four_byte_scan_code:       
         ; Get the current buffer length and branch
@@ -357,14 +386,14 @@ kb_process_scan_code_buffer:
 
         .four_byte_complete:
             ; Reset the state
-            mov bl, KB_SC_STATE_DEFAULT
+            mov bl, KB_STATE_DEFAULT
             mov byte [_kb_driver_state], bl
 
             ; Handle the 4 byte scan code
             call kb_handle_complete_four_byte_scan_code
             jmp .reset_kb_scan_code_buffer
 
-    ; When the state is KB_SC_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE, there can be
+    ; When the state is KB_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE, there can be
     ; anywhere from 2 to 6 bytes in the scan code buffer
     .state_waiting_for_six_byte_scan_code:
         ; Get the current buffer length and branch
@@ -386,7 +415,7 @@ kb_process_scan_code_buffer:
 
         .six_byte_complete:
             ; Reset the state
-            mov bl, KB_SC_STATE_DEFAULT
+            mov bl, KB_STATE_DEFAULT
             mov byte [_kb_driver_state], bl
 
             ; Handle the 6 byte scan code
@@ -650,6 +679,24 @@ kb_is_six_byte_scancode_valid:
         ret
 
 ;
+; Macro to print a specified number of bytes from the scan code buffer
+; @input 1 - number of bytes to print
+;
+%macro print_scan_code 1
+    %assign i 0
+    %rep %1
+        mov byte al, [_kb_scan_code_buffer + i]
+        call kprint_byte
+
+        %if i != %1 - 1
+            mkprint(' ')
+        %endif
+
+        %assign i i+1
+    %endrep
+%endmacro
+
+;
 ; Processes a full single byte scan code
 ;
 ; Converts scan code into a key code and marks it in the key state buffer
@@ -657,23 +704,33 @@ kb_is_six_byte_scancode_valid:
 kb_handle_complete_one_byte_scan_code:
     pushad
 
-    mov byte al, [_kb_scan_code_buffer]
+    mkprint('1 byte scan code: ')
 
-    ; Print the start of the message
-    mov esi, .message
-    call kprint
+    print_scan_code 1
 
-    ; Print the byte to the screen
+    call kb_translate_one_byte_scan_code_to_key_code
+
+    mkprint(' -> ')
+
     call kprint_byte
 
-    ; Print a new line
-    mov esi, 0
-    call kprintln
+    mkprint(' (')
 
-    popad
-    ret
+    cmp ah, 1
+    je .key_released
 
-    .message: db '1 byte scan code: ', 0
+    .key_pressed:
+        mkprint('pressed')
+        jmp .print_end
+
+    .key_released:
+        mkprint('released')
+
+    .print_end:
+        mkprintln(')')
+
+        popad
+        ret
 
 ;
 ; Processes a full two byte scan code
@@ -683,31 +740,33 @@ kb_handle_complete_one_byte_scan_code:
 kb_handle_complete_two_byte_scan_code:
     pushad
 
-    ; Print the start of the message
-    mov esi, .message
-    call kprint
+    mkprint('2 byte scan code: ')
 
-    ; Print the first byte to the screen
-    mov byte al, [_kb_scan_code_buffer]
+    print_scan_code 2
+
+    call kb_translate_two_byte_scan_code_to_key_code
+
+    mkprint(' -> ')
+
     call kprint_byte
 
-    ; Print a space
-    mov esi, .space
-    call kprint
+    mkprint(' (')
 
-    ; Print the second byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 1]
-    call kprint_byte
+    cmp ah, 1
+    je .key_released
 
-    ; Print a new line
-    mov esi, 0
-    call kprintln
+    .key_pressed:
+        mkprint('pressed')
+        jmp .print_end
+
+    .key_released:
+        mkprint('released')
+
+    .print_end:
+        mkprintln(')')
 
     popad
     ret
-
-    .message: db '2 byte scan code: ', 0
-    .space: db ' ', 0
 
 ;
 ; Processes a full four byte scan code
@@ -717,47 +776,33 @@ kb_handle_complete_two_byte_scan_code:
 kb_handle_complete_four_byte_scan_code:
     pushad
 
-    ; Print the start of the message
-    mov esi, .message
-    call kprint
+    mkprint('4 byte scan code: ')
 
-    ; Print the first byte to the screen
-    mov byte al, [_kb_scan_code_buffer]
+    print_scan_code 4
+
+    call kb_translate_four_byte_scan_code_to_key_code
+
+    mkprint(' -> ')
+
     call kprint_byte
 
-    ; Print a space
-    mov esi, .space
-    call kprint
+    mkprint(' (')
 
-    ; Print the second byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 1]
-    call kprint_byte
+    cmp ah, 1
+    je .key_released
 
-    ; Print a space
-    mov esi, .space
-    call kprint
+    .key_pressed:
+        mkprint('pressed')
+        jmp .print_end
 
-    ; Print the third byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 2]
-    call kprint_byte
+    .key_released:
+        mkprint('released')
 
-    ; Print a space
-    mov esi, .space
-    call kprint
-
-    ; Print the fourth byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 3]
-    call kprint_byte
-
-    ; Print a new line
-    mov esi, 0
-    call kprintln
+    .print_end:
+        mkprintln(')')
 
     popad
     ret
-
-    .message: db '4 byte scan code: ', 0
-    .space: db ' ', 0
 
 ;
 ; Processes a full six byte scan code
@@ -767,63 +812,20 @@ kb_handle_complete_four_byte_scan_code:
 kb_handle_complete_six_byte_scan_code:
     pushad
 
-    ; Print the start of the message
-    mov esi, .message
-    call kprint
+    mkprint('6 byte scan code: ')
 
-    ; Print the first byte to the screen
-    mov byte al, [_kb_scan_code_buffer]
+    print_scan_code 6
+
+    call kb_translate_two_byte_scan_code_to_key_code
+
+    mkprint(' -> ')
+
     call kprint_byte
 
-    ; Print a space
-    mov esi, .space
-    call kprint
-
-    ; Print the second byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 1]
-    call kprint_byte
-
-    ; Print a space
-    mov esi, .space
-    call kprint
-
-    ; Print the third byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 2]
-    call kprint_byte
-
-    ; Print a space
-    mov esi, .space
-    call kprint
-
-    ; Print the fourth byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 3]
-    call kprint_byte
-
-    ; Print a space
-    mov esi, .space
-    call kprint
-
-    ; Print the fifth byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 4]
-    call kprint_byte
-
-    ; Print a space
-    mov esi, .space
-    call kprint
-
-    ; Print the sixth byte to the screen
-    mov byte al, [_kb_scan_code_buffer + 5]
-    call kprint_byte
-
-    ; Print a new line
-    mov esi, 0
-    call kprintln
+    mkprintln(' (pressed)')
 
     popad
     ret
-
-    .message: db '6 byte scan code: ', 0
-    .space: db ' ', 0
 
 ;
 ; Enqueue a byte into the command queue
@@ -966,7 +968,7 @@ kb_cmd_output_first_if_not_empty:
 
     ; If there are no commands in the buffer, do nothing
     cmp cl, 0
-    je .finished
+    je .no_commands_in_queue
 
     ; Get the first byte in the command buffer and send it
     call kb_cmd_peek_byte
@@ -974,12 +976,22 @@ kb_cmd_output_first_if_not_empty:
 
     ; If the command byte requires additional data, get the next byte in the buffer and send it too
     call kb_cmd_requires_data 
-    jne .finished
+    jne .set_command_state
 
     .send_data_byte:
         call io_wait
         call kb_cmd_peek_byte_data
         out KEYBOARD_PORT, al
+
+    .set_command_state:
+        ; Set the state to waiting for command response
+        mov byte [_kb_driver_state], KB_STATE_WAITING_FOR_COMMAND_RESPONSE
+
+        jmp .finished
+
+    .no_commands_in_queue:
+        ; Set the state to default
+        mov byte [_kb_driver_state], KB_STATE_DEFAULT
 
     .finished:
         popad
@@ -1039,7 +1051,7 @@ kb_queue_command:
 ;
 ; Adds a command and a data byte to the command queue and then sends it to the keyboard if the queue was previously empty
 ; @input al - command
-; @input bl - data
+; @input ah - data
 ;
 kb_queue_command_with_data:
     pushad
@@ -1050,7 +1062,7 @@ kb_queue_command_with_data:
     call kb_cmd_enqueue_byte
 
     ; Enqueue the data
-    mov al, bl
+    mov al, ah
     call kb_cmd_enqueue_byte
 
     ; Get the current index into the command buffer
@@ -1088,5 +1100,324 @@ kb_wait_for_empty_command_queue:
     .finished:
         popad
         ret
+
+KB_KC_1 equ 0x00
+KB_KC_2 equ 0x01
+KB_KC_3 equ 0x02
+KB_KC_4 equ 0x03
+KB_KC_5 equ 0x04
+KB_KC_6 equ 0x05
+KB_KC_7 equ 0x06
+KB_KC_8 equ 0x07
+KB_KC_9 equ 0x08
+KB_KC_0 equ 0x09
+
+KB_KC_A equ 0x10
+KB_KC_B equ 0x11
+KB_KC_C equ 0x12
+KB_KC_D equ 0x13
+KB_KC_E equ 0x14
+KB_KC_F equ 0x15
+KB_KC_G equ 0x16
+KB_KC_H equ 0x17
+KB_KC_I equ 0x18
+KB_KC_J equ 0x19
+KB_KC_K equ 0x1A
+KB_KC_L equ 0x1B
+KB_KC_M equ 0x1C
+KB_KC_N equ 0x1D
+KB_KC_O equ 0x1E
+KB_KC_P equ 0x1F
+KB_KC_Q equ 0x20
+KB_KC_R equ 0x21
+KB_KC_S equ 0x22
+KB_KC_T equ 0x23
+KB_KC_U equ 0x24
+KB_KC_V equ 0x25
+KB_KC_W equ 0x26
+KB_KC_X equ 0x27
+KB_KC_Y equ 0x28
+KB_KC_Z equ 0x29
+
+KB_KC_GRAVE_ACCENT equ 0x30
+KB_KC_MINUS equ 0x31
+KB_KC_EQUALS equ 0x32
+KB_KC_LEFT_BRACKET equ 0x33
+KB_KC_RIGHT_BRACKET equ 0x34
+KB_KC_BACKSLASH equ 0x35
+KB_KC_SEMICOLON equ 0x36
+KB_KC_APOSTROPHE equ 0x37
+KB_KC_COMMA equ 0x38
+KB_KC_PERIOD equ 0x39
+KB_KC_SLASH equ 0x3A
+
+KB_KC_ENTER equ 0x40
+KB_KC_TAB equ 0x41
+KB_KC_SPACE equ 0x42
+
+KB_KC_LEFT_SHIFT equ 0x50
+KB_KC_RIGHT_SHIFT equ 0x51
+KB_KC_LEFT_CTRL equ 0x52
+KB_KC_RIGHT_CTRL equ 0x53
+KB_KC_LEFT_ALT equ 0x54
+KB_KC_RIGHT_ALT equ 0x55
+KB_KC_LEFT_GUI equ 0x56
+KB_KC_RIGHT_GUI equ 0x57
+
+KB_KC_CAPS_LOCK equ 0x5D
+KB_KC_NUM_LOCK equ 0x5E
+KB_KC_SCROLL_LOCK equ 0x5F
+
+KB_KC_ESC equ 0x60
+KB_KC_BACKSPACE equ 0x61
+KB_KC_DELETE equ 0x62
+KB_KC_INSERT equ 0x63
+KB_KC_HOME equ 0x64
+KB_KC_END equ 0x65
+KB_KC_PAGE_UP equ 0x66
+KB_KC_PAGE_DOWN equ 0x67
+
+KB_KC_PRT_SCN equ 0x6E
+KB_KC_PAUSE equ 0x6F
+
+KB_KC_UP_ARROW equ 0x70
+KB_KC_LEFT_ARROW equ 0x71
+KB_KC_DOWN_ARROW equ 0x72
+KB_KC_RIGHT_ARROW equ 0x73
+
+KB_KC_MULTIMEDIA_PREV_TRACK equ 0x90
+KB_KC_MULTIMEDIA_NEXT_TRACK equ 0x91
+KB_KC_MULTIMEDIA_PLAY equ 0x92
+KB_KC_MULTIMEDIA_STOP equ 0x93
+KB_KC_MULTIMEDIA_MUTE equ 0x94
+KB_KC_MULTIMEDIA_VOLUME_DOWN equ 0x95
+KB_KC_MULTIMEDIA_VOLUME_UP equ 0x96
+
+KB_KC_APPS equ 0x9F
+
+KB_KC_MULTIMEDIA_CALCULATOR equ 0xA0
+KB_KC_MULTIMEDIA_WWW_HOME equ 0xA1
+KB_KC_MULTIMEDIA_WWW_SEARCH equ 0xA2
+KB_KC_MULTIMEDIA_WWW_FAVORITES equ 0xA3
+KB_KC_MULTIMEDIA_WWW_REFRESH equ 0xA4
+KB_KC_MULTIMEDIA_WWW_STOP equ 0xA5
+KB_KC_MULTIMEDIA_WWW_FORWARD equ 0xA6
+KB_KC_MULTIMEDIA_WWW_BACK equ 0xA7
+KB_KC_MULTIMEDIA_MY_COMPUTER equ 0xA8
+KB_KC_MULTIMEDIA_EMAIL equ 0xA9
+KB_KC_MULTIMEDIA_MEDIA_SELECT equ 0xAA
+
+KB_KC_ACPI_POWER equ 0xB0
+KB_KC_ACPI_SLEEP equ 0xB1
+KB_KC_ACPI_WAKE equ 0xB2
+
+KB_KC_KEYPAD_0 equ 0xD0
+KB_KC_KEYPAD_1 equ 0xD1
+KB_KC_KEYPAD_2 equ 0xD2
+KB_KC_KEYPAD_3 equ 0xD3
+KB_KC_KEYPAD_4 equ 0xD4
+KB_KC_KEYPAD_5 equ 0xD5
+KB_KC_KEYPAD_6 equ 0xD6
+KB_KC_KEYPAD_7 equ 0xD7
+KB_KC_KEYPAD_8 equ 0xD8
+KB_KC_KEYPAD_9 equ 0xD9
+KB_KC_KEYPAD_SLASH equ 0xDA
+KB_KC_KEYPAD_ASTERISK equ 0xDB
+KB_KC_KEYPAD_MINUS equ 0xDC
+KB_KC_KEYPAD_PLUS equ 0xDD
+KB_KC_KEYPAD_PERIOD equ 0xDE
+KB_KC_KEYPAD_ENTER equ 0xDF
+
+KB_KC_F1 equ 0xE0
+KB_KC_F2 equ 0xE1
+KB_KC_F3 equ 0xE2
+KB_KC_F4 equ 0xE3
+KB_KC_F5 equ 0xE4
+KB_KC_F6 equ 0xE5
+KB_KC_F7 equ 0xE6
+KB_KC_F8 equ 0xE7
+KB_KC_F9 equ 0xE8
+KB_KC_F10 equ 0xE9
+KB_KC_F11 equ 0xEA
+KB_KC_F12 equ 0xEB
+
+KB_KC_F13 equ 0xF0
+KB_KC_F14 equ 0xF1
+KB_KC_F15 equ 0xF2
+KB_KC_F16 equ 0xF3
+KB_KC_F17 equ 0xF4
+KB_KC_F18 equ 0xF5
+KB_KC_F19 equ 0xF6
+KB_KC_F20 equ 0xF7
+KB_KC_F21 equ 0xF8
+KB_KC_F22 equ 0xF9
+KB_KC_F23 equ 0xFA
+KB_KC_F24 equ 0xFB
+
+KB_KC_UNUSED equ 0xFF
+
+; Lookup table to scan code set 1 (one byte scan codes)
+; We only need the first 128 entries because the MSB is reserved for the key state 
+_kb_scan_code_set_1_one_byte_lookup_table:
+    .0x00: db KB_KC_UNUSED,     KB_KC_ESC,          KB_KC_1,            KB_KC_2
+    .0x04: db KB_KC_3,          KB_KC_4,            KB_KC_5,            KB_KC_6
+    .0x08: db KB_KC_7,          KB_KC_8,            KB_KC_9,            KB_KC_0
+    .0x0C: db KB_KC_MINUS,      KB_KC_EQUALS,       KB_KC_BACKSPACE,    KB_KC_TAB
+    .0x10: db KB_KC_Q,          KB_KC_W,            KB_KC_E,            KB_KC_R
+    .0x14: db KB_KC_T,          KB_KC_Y,            KB_KC_U,            KB_KC_I
+    .0x18: db KB_KC_O,          KB_KC_P,            KB_KC_LEFT_BRACKET, KB_KC_RIGHT_BRACKET
+    .0x1C: db KB_KC_ENTER,      KB_KC_LEFT_CTRL,    KB_KC_A,            KB_KC_S
+    .0x20: db KB_KC_D,          KB_KC_F,            KB_KC_G,            KB_KC_H
+    .0x24: db KB_KC_J,          KB_KC_K,            KB_KC_L,            KB_KC_SEMICOLON
+    .0x28: db KB_KC_APOSTROPHE, KB_KC_GRAVE_ACCENT, KB_KC_LEFT_SHIFT,   KB_KC_BACKSLASH
+    .0x2C: db KB_KC_Z,          KB_KC_X,            KB_KC_C,            KB_KC_V
+    .0x30: db KB_KC_B,          KB_KC_N,            KB_KC_M,            KB_KC_COMMA
+    .0x34: db KB_KC_PERIOD,     KB_KC_SLASH,        KB_KC_RIGHT_SHIFT,  KB_KC_KEYPAD_ASTERISK
+    .0x38: db KB_KC_LEFT_ALT,   KB_KC_SPACE,        KB_KC_CAPS_LOCK,    KB_KC_F1
+    .0x3C: db KB_KC_F2,         KB_KC_F3,           KB_KC_F4,           KB_KC_F5
+    .0x40: db KB_KC_F6,         KB_KC_F7,           KB_KC_F8,           KB_KC_F9
+    .0x44: db KB_KC_F10,        KB_KC_NUM_LOCK,     KB_KC_SCROLL_LOCK,  KB_KC_KEYPAD_7
+    .0x48: db KB_KC_KEYPAD_8,   KB_KC_KEYPAD_9,     KB_KC_KEYPAD_MINUS, KB_KC_KEYPAD_4
+    .0x4C: db KB_KC_KEYPAD_5,   KB_KC_KEYPAD_6,     KB_KC_KEYPAD_PLUS,  KB_KC_KEYPAD_1
+    .0x50: db KB_KC_KEYPAD_2,   KB_KC_KEYPAD_3,     KB_KC_KEYPAD_0,     KB_KC_KEYPAD_PERIOD
+    .0x54: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_F11
+    .0x58: db KB_KC_F12,        KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x5C: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x60: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x64: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x68: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x6C: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x70: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x74: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x78: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+    .0x7C: db KB_KC_UNUSED,     KB_KC_UNUSED,       KB_KC_UNUSED,       KB_KC_UNUSED
+
+;
+; Converts a one byte scan code in the scan code buffer into a key code
+; @output al - key code
+; @output ah - key state (0 = pressed, 1 = released)
+;
+kb_translate_one_byte_scan_code_to_key_code:
+    push ebx 
+
+    ; Get the scan code from the buffer
+    mov al, [_kb_scan_code_buffer]
+
+    ; If the MSB is set, it is a key release
+    mov ah, al
+    shr ah, 7
+
+    ; Remove the state bit from the scan code
+    and al, 0x7F
+
+    ; Get the key code from the lookup table
+    mov ebx, 0
+    mov bl, al
+    mov al, [_kb_scan_code_set_1_one_byte_lookup_table + ebx]
+
+    .finished:
+        pop ebx
+        ret
+
+; Lookup table to scan code set 1 (two byte scan codes)
+; We only need the first 128 entries because the MSB is reserved for the key state 
+_kb_scan_code_set_1_two_byte_lookup_table:
+    .0x00: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x04: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x08: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x0C: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x10: db KB_KC_MULTIMEDIA_PREV_TRACK, KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x14: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x18: db KB_KC_UNUSED,                KB_KC_MULTIMEDIA_NEXT_TRACK,   KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x1C: db KB_KC_KEYPAD_ENTER,          KB_KC_RIGHT_CTRL,              KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x20: db KB_KC_MULTIMEDIA_MUTE,       KB_KC_MULTIMEDIA_CALCULATOR,   KB_KC_MULTIMEDIA_PLAY,          KB_KC_UNUSED
+    .0x24: db KB_KC_MULTIMEDIA_STOP,       KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x28: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x2C: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_MULTIMEDIA_VOLUME_DOWN,   KB_KC_UNUSED
+    .0x30: db KB_KC_MULTIMEDIA_VOLUME_UP,  KB_KC_UNUSED,                  KB_KC_MULTIMEDIA_WWW_HOME,      KB_KC_UNUSED
+    .0x34: db KB_KC_UNUSED,                KB_KC_KEYPAD_SLASH,            KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x38: db KB_KC_RIGHT_ALT,             KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x3C: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x40: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x44: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_HOME
+    .0x48: db KB_KC_UP_ARROW,              KB_KC_PAGE_UP,                 KB_KC_UNUSED,                   KB_KC_LEFT_ARROW
+    .0x4C: db KB_KC_UNUSED,                KB_KC_RIGHT_ARROW,             KB_KC_UNUSED,                   KB_KC_END
+    .0x50: db KB_KC_DOWN_ARROW,            KB_KC_PAGE_DOWN,               KB_KC_INSERT,                   KB_KC_DELETE
+    .0x54: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x58: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_LEFT_GUI
+    .0x5C: db KB_KC_RIGHT_GUI,             KB_KC_APPS,                    KB_KC_ACPI_POWER,               KB_KC_ACPI_SLEEP
+    .0x60: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_ACPI_WAKE
+    .0x64: db KB_KC_UNUSED,                KB_KC_MULTIMEDIA_WWW_SEARCH,   KB_KC_MULTIMEDIA_WWW_FAVORITES, KB_KC_MULTIMEDIA_WWW_REFRESH
+    .0x68: db KB_KC_MULTIMEDIA_WWW_STOP,   KB_KC_MULTIMEDIA_WWW_FORWARD,  KB_KC_MULTIMEDIA_WWW_BACK,      KB_KC_MULTIMEDIA_MY_COMPUTER
+    .0x6C: db KB_KC_MULTIMEDIA_EMAIL,      KB_KC_MULTIMEDIA_MEDIA_SELECT, KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x70: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x74: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x78: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+    .0x7C: db KB_KC_UNUSED,                KB_KC_UNUSED,                  KB_KC_UNUSED,                   KB_KC_UNUSED
+
+;
+; Converts a two byte scan code in the scan code buffer into a key code
+;
+; NOTE: This function assumes that the scan code in the buffer has already been validated as a valid two byte scan code
+; @output al - key code
+; @output ah - key state (0 = pressed, 1 = released)
+;
+kb_translate_two_byte_scan_code_to_key_code:
+    push ebx 
+
+    ; Get the scan code from the buffer (first byte is always 0xE0)
+    mov al, [_kb_scan_code_buffer + 1]
+
+    ; If the MSB is set, it is a key release
+    mov ah, al
+    shr ah, 7
+
+    ; Remove the state bit from the scan code
+    and al, 0x7F
+
+    ; Get the key code from the lookup table
+    mov ebx, 0
+    mov bl, al
+    mov al, [_kb_scan_code_set_1_two_byte_lookup_table + ebx]
+
+    .finished:
+        pop ebx
+        ret
+
+;
+; Converts a four byte scan code in the scan code buffer into a key code
+;
+; Since only 1 key encodes to a 4 byte scan code, we only need to check the key state
+;
+; NOTE: This function assumes that the scan code in the buffer has already been validated as a valid four byte scan code
+; @output al - key code
+; @output ah - key state (0 = pressed, 1 = released)
+;
+kb_translate_four_byte_scan_code_to_key_code:
+    ; Get the scan code from the buffer (first byte is always 0xE0)
+    mov al, [_kb_scan_code_buffer + 1]
+
+    ; If the MSB is set, it is a key release
+    mov ah, al
+    shr ah, 7
+
+    mov al, KB_KC_PRT_SCN
+
+    ret
+
+;
+; Converts a six byte scan code in the scan code buffer into a key code
+;
+; Since only 1 key encodes to a 6 byte scan code, and it never sends a key release so this funciton returns a constant but is still here for completeness
+;
+; NOTE: This function assumes that the scan code in the buffer has already been validated as a valid six byte scan code
+; @output al - key code
+; @output ah - key state (0 = pressed, 1 = released)
+;
+kb_translate_six_byte_scan_code_to_key_code:
+    mov al, KB_KC_PAUSE
+    mov ah, 0
+
+    ret
 
 %endif
