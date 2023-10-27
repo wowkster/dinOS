@@ -66,8 +66,8 @@ struct kb_key_event_packet {
     char    ascii_character; // Translated ascii character (if applicable or 0 otherwise)
 
     uint8_t key_state;       // The new state of the key
-                             //   0 - released
-                             //   1 - pressed
+                             //   0 - key up
+                             //   1 - key down
 
     uint8_t modifiers;       // Bit mask of modifier keys states:
                              //   0 - shift state

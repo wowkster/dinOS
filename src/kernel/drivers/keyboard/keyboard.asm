@@ -4,6 +4,11 @@
 %include "vga.asm"
 %include "interrupt/pic.asm"
 
+%include "drivers/keyboard/macros.asm"
+%include "drivers/keyboard/commands.asm"
+%include "drivers/keyboard/key_code.asm"
+%include "drivers/keyboard/key_event.asm"
+
 ;
 ; A basic driver for interacting with PS/2 Keyboards
 ;
@@ -25,45 +30,6 @@ _kb_driver_state: db 0
 ; Buffer to hold the scan codes we've recieved (used to decode multibyte scan codes)
 _kb_scan_code_buffer: times 6 db 0  ; Static 6 byte buffer to hold all the recieved scan codes
 _kb_scan_code_buffer_idx: db 0      ; Static index into the scan code buffer (points to next available space in buffer)
-
-; PS/2 Keyboard Commands
-; https://wiki.osdev.org/PS/2_Keyboard#Commands
-KB_CMD_SET_LEDS equ 0xED
-KB_CMD_ECHO equ 0xEE
-KB_CMD_SCAN_CODE_SET equ 0xF0
-KB_CMD_IDENTIFY equ 0xF2
-KB_CMD_SET_TYPEMATIC_RATE_DELAY equ 0xF3
-KB_CMD_ENABLE_SCANNING equ 0xF4
-KB_CMD_DISABLE_SCANNING equ 0xF5
-KB_CMD_SET_DEFAULT_PARAMS equ 0xF6
-KB_CMD_RESEND equ 0xFE
-KB_CMD_RESET_SELF_TEST equ 0xFF
-
-; Set LED Data
-KB_CMD_DATA_LED_SCROLL_LOCK equ 0b0000_0001
-KB_CMD_DATA_LED_NUM_LOCK equ 0b0000_0010
-KB_CMD_DATA_LED_CAPS_LOCK equ 0b0000_0100
-
-; Get/Set Scan Code Data
-KB_CMD_DATA_GET_SCAN_CODE equ 0x00
-KB_CMD_DATA_SET_SCAN_CODE_1 equ 0x01
-KB_CMD_DATA_SET_SCAN_CODE_2 equ 0x02
-KB_CMD_DATA_SET_SCAN_CODE_3 equ 0x03
-
-; PS/2 Keyboard Responses
-; https://wiki.osdev.org/PS/2_Keyboard#Commands
-KB_RESPONSE_ERROR_1 equ 0x00
-KB_RESPONSE_ERROR_2 equ 0xFF
-KB_RESPONSE_SELF_TEST_PASS equ 0xAA
-KB_RESPONSE_SELF_TEST_FAIL_1 equ 0xFC
-KB_RESPONSE_SELF_TEST_FAIL_2 equ 0xFD
-KB_RESPONSE_ECHO equ 0xEE
-KB_RESPONSE_ACK equ 0xFA
-KB_RESPONSE_RESEND equ 0xFE
-
-; Internal command queue implemented as an array
-_kb_cmd_buffer: times 64 db 0 ; Static 64 byte buffer to hold all the kb command we will ever need
-_kb_cmd_buffer_idx: db 0      ; Static index into the command buffer (points to next available space in buffer)
 
 ;
 ; Driver init function called after interrupts are enabled on the system
@@ -315,7 +281,9 @@ kb_process_scan_code_buffer:
 
         .one_byte_complete:
             ; Handle the 1 byte scan code
-            call kb_handle_complete_one_byte_scan_code
+            call kb_translate_one_byte_scan_code_to_key_code
+            call kb_handle_key_code
+
             jmp .reset_kb_scan_code_buffer
 
     ; When the state is KB_STATE_WAITING_FOR_TWO_OR_FOUR_BYTE_SCAN_CODE, there are
@@ -350,7 +318,9 @@ kb_process_scan_code_buffer:
             mov byte [_kb_driver_state], bl
 
             ; Handle the 2 byte scan code
-            call kb_handle_complete_two_byte_scan_code
+            call kb_translate_two_byte_scan_code_to_key_code
+            call kb_handle_key_code
+
             jmp .reset_kb_scan_code_buffer
 
     ; When the state is KB_STATE_WAITING_FOR_FOUR_BYTE_SCAN_CODE, there are either
@@ -390,7 +360,9 @@ kb_process_scan_code_buffer:
             mov byte [_kb_driver_state], bl
 
             ; Handle the 4 byte scan code
-            call kb_handle_complete_four_byte_scan_code
+            call kb_translate_four_byte_scan_code_to_key_code
+            call kb_handle_key_code
+
             jmp .reset_kb_scan_code_buffer
 
     ; When the state is KB_STATE_WAITING_FOR_SIX_BYTE_SCAN_CODE, there can be
@@ -419,7 +391,9 @@ kb_process_scan_code_buffer:
             mov byte [_kb_driver_state], bl
 
             ; Handle the 6 byte scan code
-            call kb_handle_complete_six_byte_scan_code
+            call kb_translate_two_byte_scan_code_to_key_code
+            call kb_handle_key_code
+
             jmp .reset_kb_scan_code_buffer
 
     ; Reset scan code buffer
@@ -431,34 +405,9 @@ kb_process_scan_code_buffer:
         popad
         ret
 
-;
-; Defines end cases for functions that match or dont match a certain predicate
-;
-%macro matchable 0
-
-    .matched:
-        push eax
-
-        ; Set zero flag
-        lahf                      ; Load AH from FLAGS
-        or       ah, 001000000b    ; Set bit for ZF
-        sahf                      ; Store AH back to Flags
-
-        pop eax
-        jmp .finished
-
-    .not_matched:
-        push eax
-
-        ; Clear zero flag
-        lahf                      ; Load lower 8 bit from Flags into AH
-        and      ah, 010111111b    ; Clear bit for ZF
-        sahf                      ; Store AH back to Flags
-
-        pop eax
-        jmp .finished
-
-%endmacro
+; ====================================================================
+;                         Scan Code Validation
+; ====================================================================
 
 ;
 ; Checks to see if a single byte scan code is within the valid range(s)
@@ -684,482 +633,9 @@ kb_is_six_byte_scancode_valid:
         popad
         ret
 
-;
-; Processes a full single byte scan code
-;
-; Converts scan code into a key code and marks it in the key state buffer
-;
-kb_handle_complete_one_byte_scan_code:
-    call kb_translate_one_byte_scan_code_to_key_code
-
-    call kb_handle_key_code
-
-        ret
-
-;
-; Processes a full two byte scan code
-;
-; Converts scan code into a key code and marks it in the key state buffer
-;
-kb_handle_complete_two_byte_scan_code:
-    call kb_translate_two_byte_scan_code_to_key_code
-
-    call kb_handle_key_code
-
-    ret
-
-;
-; Processes a full four byte scan code
-;
-; Converts scan code into a key code and marks it in the key state buffer
-;
-kb_handle_complete_four_byte_scan_code:
-    call kb_translate_four_byte_scan_code_to_key_code
-
-    call kb_handle_key_code
-
-    ret
-
-;
-; Processes a full six byte scan code
-;
-; Converts scan code into a key code and marks it in the key state buffer
-;
-kb_handle_complete_six_byte_scan_code:
-    call kb_translate_two_byte_scan_code_to_key_code
-
-    call kb_handle_key_code
-
-    ret
-
-;
-; Enqueue a byte into the command queue
-; @input al - command
-;
-kb_cmd_enqueue_byte:
-    pushad
-
-    ; Get the current index into the command buffer
-    mov ebx, 0
-    mov byte bl, [_kb_cmd_buffer_idx]
-
-    ; Panic if the command buffer is full
-    cmp bl, 64
-    je .cmd_buffer_full
-
-    ; Store the command into the next available slot in the buffer
-    mov byte [_kb_cmd_buffer + ebx], al
-
-    ; Increment the buffer index and store it back
-    inc ebx
-    mov byte [_kb_cmd_buffer_idx], bl
-
-    popad
-    ret
-
-    .cmd_buffer_full:
-        kpanic('kb_cmd_enqueue_byte', 'Keyboard command buffer is full!')
-
-;
-; Removes the first byte in the command queue
-;
-kb_cmd_dequeue_byte:
-    pushad
-
-    ; Get the current index into the command buffer
-    xor ecx, ecx
-    mov byte cl, [_kb_cmd_buffer_idx]
-
-    ; Panic if the command buffer is empty
-    cmp cl, 0
-    je .cmd_buffer_empty
-
-    ; Shift all the commands in the buffer down by 1
-    lea eax, [_kb_cmd_buffer]
-    lea ebx, [_kb_cmd_buffer + 1]
-    dec cl
-    call memcpy
-
-    ; Store the new buffer index back
-    mov byte [_kb_cmd_buffer_idx], cl
-
-    popad
-    ret
-
-    .cmd_buffer_empty:
-        kpanic('kb_cmd_deqeue', 'Keyboard command buffer is empty!')
-
-;
-; Peeks at the next byte in the command queue
-; @output al - command byte
-;
-kb_cmd_peek_byte:
-    push ecx
-
-    ; Get the current index into the command buffer
-    xor ecx, ecx
-    mov byte cl, [_kb_cmd_buffer_idx]
-
-    ; Panic if the command buffer is empty
-    cmp cl, 0
-    je .cmd_buffer_empty
-
-    ; Get the first byte in the command buffer
-    mov byte al, [_kb_cmd_buffer]
-
-    pop ecx
-    ret
-
-    .cmd_buffer_empty:
-        kpanic('kb_cmd_peek_byte', 'Keyboard command buffer is empty!')
-
-;
-; Peeks at the next command in the command queue for its data byte
-; @output al - command data byte
-;
-kb_cmd_peek_byte_data:
-    push ecx
-
-    ; Get the current index into the command buffer
-    xor ecx, ecx
-    mov byte cl, [_kb_cmd_buffer_idx]
-
-    ; Panic if the command buffer is not big enough
-    cmp cl, 2
-    jl .cmd_buffer_empty
-
-    ; Get the seconds byte in the command buffer
-    mov byte al, [_kb_cmd_buffer + 1]
-
-    pop ecx
-    ret
-
-    .cmd_buffer_empty:
-        kpanic('kb_cmd_peek_byte_data', 'Keyboard command buffer is less than 2 bytes in length!')
-
-;
-; Checks to see if a command byte has a data byte as well
-; @input al - command byte
-;
-kb_cmd_requires_data:
-    pushad
-    
-    cmp al, KB_CMD_SET_LEDS
-    je .matched
-
-    cmp al, KB_CMD_SCAN_CODE_SET
-    je .matched
-
-    cmp al, KB_CMD_SET_TYPEMATIC_RATE_DELAY
-    je .matched
-
-    jmp .not_matched
-
-    matchable
-
-    .finished:
-        popad
-        ret
-
-;
-; Sends the first command in the queue to the keyboard if the queue is not empty
-;
-kb_cmd_output_first_if_not_empty:
-    pushad
-
-    ; Get the current index into the command buffer
-    xor ecx, ecx
-    mov byte cl, [_kb_cmd_buffer_idx]
-
-    ; If there are no commands in the buffer, do nothing
-    cmp cl, 0
-    je .no_commands_in_queue
-
-    ; Get the first byte in the command buffer and send it
-    call kb_cmd_peek_byte
-    out KEYBOARD_PORT, al
-
-    ; If the command byte requires additional data, get the next byte in the buffer and send it too
-    call kb_cmd_requires_data 
-    jne .set_command_state
-
-    .send_data_byte:
-        call io_wait
-        call kb_cmd_peek_byte_data
-        out KEYBOARD_PORT, al
-
-    .set_command_state:
-        ; Set the state to waiting for command response
-        mov byte [_kb_driver_state], KB_STATE_WAITING_FOR_COMMAND_RESPONSE
-
-        jmp .finished
-
-    .no_commands_in_queue:
-        ; Set the state to default
-        mov byte [_kb_driver_state], KB_STATE_DEFAULT
-
-    .finished:
-        popad
-        ret
-
-;
-; Remove a command and its data byte (is present) from the command queue
-;
-kb_cmd_rm_from_queue:
-    pushad
-
-    ; Get the first command byte in the buffer
-    call kb_cmd_peek_byte
-
-    ; Remove the first byte in the buffer
-    call kb_cmd_dequeue_byte
-
-    ; If the command byte requires additional data, remove the next byte in the buffer
-    call kb_cmd_requires_data
-    jne .finished
-
-    .remove_data_byte:
-        call kb_cmd_dequeue_byte
-
-    .finished:
-        popad
-        ret
-
-;
-; Adds a command to the command queue and then sends it to the keyboard if the queue was previously empty
-; @input al - command
-;
-kb_queue_command:
-    pushad
-    pushf
-    cli
-
-    ; Enqueue the command
-    call kb_cmd_enqueue_byte
-
-    ; Get the current index into the command buffer
-    xor ecx, ecx
-    mov byte cl, [_kb_cmd_buffer_idx]
-
-    ; If there is more than 1 command byte in the buffer, do nothing (already being handled)
-    cmp cl, 1
-    jg .finished
-
-    ; Otherwise, there are no commands being processed so we need to send it to the keyboard
-    call kb_cmd_output_first_if_not_empty
-
-    .finished:
-        popf
-        popad
-        ret
-
-;
-; Adds a command and a data byte to the command queue and then sends it to the keyboard if the queue was previously empty
-; @input al - command
-; @input ah - data
-;
-kb_queue_command_with_data:
-    pushad
-    pushf
-    cli
-
-    ; Enqueue the command
-    call kb_cmd_enqueue_byte
-
-    ; Enqueue the data
-    mov al, ah
-    call kb_cmd_enqueue_byte
-
-    ; Get the current index into the command buffer
-    xor ecx, ecx
-    mov byte cl, [_kb_cmd_buffer_idx]
-
-    ; If there are more than 2 command bytes in the buffer, do nothing (already being handled)
-    cmp cl, 2
-    jg .finished
-
-    ; Otherwise, there are no commands being processed so we need to send it to the keyboard
-    call kb_cmd_output_first_if_not_empty
-
-    .finished:
-        popf
-        popad
-        ret
-
-;
-; Waits for the command queue to be empty (spinloop)
-;
-kb_wait_for_empty_command_queue:
-    pushad
-
-    .spin_loop:
-        xor ecx, ecx
-        mov byte cl, [_kb_cmd_buffer_idx]
-
-        cmp cl, 0
-        je .finished
-
-        pause
-        jmp .spin_loop
-
-    .finished:
-        popad
-        ret
-
-KB_KC_1 equ 0x00
-KB_KC_2 equ 0x01
-KB_KC_3 equ 0x02
-KB_KC_4 equ 0x03
-KB_KC_5 equ 0x04
-KB_KC_6 equ 0x05
-KB_KC_7 equ 0x06
-KB_KC_8 equ 0x07
-KB_KC_9 equ 0x08
-KB_KC_0 equ 0x09
-
-KB_KC_A equ 0x10
-KB_KC_B equ 0x11
-KB_KC_C equ 0x12
-KB_KC_D equ 0x13
-KB_KC_E equ 0x14
-KB_KC_F equ 0x15
-KB_KC_G equ 0x16
-KB_KC_H equ 0x17
-KB_KC_I equ 0x18
-KB_KC_J equ 0x19
-KB_KC_K equ 0x1A
-KB_KC_L equ 0x1B
-KB_KC_M equ 0x1C
-KB_KC_N equ 0x1D
-KB_KC_O equ 0x1E
-KB_KC_P equ 0x1F
-KB_KC_Q equ 0x20
-KB_KC_R equ 0x21
-KB_KC_S equ 0x22
-KB_KC_T equ 0x23
-KB_KC_U equ 0x24
-KB_KC_V equ 0x25
-KB_KC_W equ 0x26
-KB_KC_X equ 0x27
-KB_KC_Y equ 0x28
-KB_KC_Z equ 0x29
-
-KB_KC_GRAVE_ACCENT equ 0x30
-KB_KC_MINUS equ 0x31
-KB_KC_EQUALS equ 0x32
-KB_KC_LEFT_BRACKET equ 0x33
-KB_KC_RIGHT_BRACKET equ 0x34
-KB_KC_BACKSLASH equ 0x35
-KB_KC_SEMICOLON equ 0x36
-KB_KC_APOSTROPHE equ 0x37
-KB_KC_COMMA equ 0x38
-KB_KC_PERIOD equ 0x39
-KB_KC_SLASH equ 0x3A
-
-KB_KC_ENTER equ 0x40
-KB_KC_TAB equ 0x41
-KB_KC_SPACE equ 0x42
-
-KB_KC_LEFT_SHIFT equ 0x50
-KB_KC_RIGHT_SHIFT equ 0x51
-KB_KC_LEFT_CTRL equ 0x52
-KB_KC_RIGHT_CTRL equ 0x53
-KB_KC_LEFT_ALT equ 0x54
-KB_KC_RIGHT_ALT equ 0x55
-KB_KC_LEFT_GUI equ 0x56
-KB_KC_RIGHT_GUI equ 0x57
-
-KB_KC_CAPS_LOCK equ 0x5D
-KB_KC_NUM_LOCK equ 0x5E
-KB_KC_SCROLL_LOCK equ 0x5F
-
-KB_KC_ESC equ 0x60
-KB_KC_BACKSPACE equ 0x61
-KB_KC_DELETE equ 0x62
-KB_KC_INSERT equ 0x63
-KB_KC_HOME equ 0x64
-KB_KC_END equ 0x65
-KB_KC_PAGE_UP equ 0x66
-KB_KC_PAGE_DOWN equ 0x67
-
-KB_KC_PRT_SCN equ 0x6E
-KB_KC_PAUSE equ 0x6F
-
-KB_KC_UP_ARROW equ 0x70
-KB_KC_LEFT_ARROW equ 0x71
-KB_KC_DOWN_ARROW equ 0x72
-KB_KC_RIGHT_ARROW equ 0x73
-
-KB_KC_MULTIMEDIA_PREV_TRACK equ 0x90
-KB_KC_MULTIMEDIA_NEXT_TRACK equ 0x91
-KB_KC_MULTIMEDIA_PLAY equ 0x92
-KB_KC_MULTIMEDIA_STOP equ 0x93
-KB_KC_MULTIMEDIA_MUTE equ 0x94
-KB_KC_MULTIMEDIA_VOLUME_DOWN equ 0x95
-KB_KC_MULTIMEDIA_VOLUME_UP equ 0x96
-
-KB_KC_APPS equ 0x9F
-
-KB_KC_MULTIMEDIA_CALCULATOR equ 0xA0
-KB_KC_MULTIMEDIA_WWW_HOME equ 0xA1
-KB_KC_MULTIMEDIA_WWW_SEARCH equ 0xA2
-KB_KC_MULTIMEDIA_WWW_FAVORITES equ 0xA3
-KB_KC_MULTIMEDIA_WWW_REFRESH equ 0xA4
-KB_KC_MULTIMEDIA_WWW_STOP equ 0xA5
-KB_KC_MULTIMEDIA_WWW_FORWARD equ 0xA6
-KB_KC_MULTIMEDIA_WWW_BACK equ 0xA7
-KB_KC_MULTIMEDIA_MY_COMPUTER equ 0xA8
-KB_KC_MULTIMEDIA_EMAIL equ 0xA9
-KB_KC_MULTIMEDIA_MEDIA_SELECT equ 0xAA
-
-KB_KC_ACPI_POWER equ 0xB0
-KB_KC_ACPI_SLEEP equ 0xB1
-KB_KC_ACPI_WAKE equ 0xB2
-
-KB_KC_KEYPAD_0 equ 0xD0
-KB_KC_KEYPAD_1 equ 0xD1
-KB_KC_KEYPAD_2 equ 0xD2
-KB_KC_KEYPAD_3 equ 0xD3
-KB_KC_KEYPAD_4 equ 0xD4
-KB_KC_KEYPAD_5 equ 0xD5
-KB_KC_KEYPAD_6 equ 0xD6
-KB_KC_KEYPAD_7 equ 0xD7
-KB_KC_KEYPAD_8 equ 0xD8
-KB_KC_KEYPAD_9 equ 0xD9
-KB_KC_KEYPAD_SLASH equ 0xDA
-KB_KC_KEYPAD_ASTERISK equ 0xDB
-KB_KC_KEYPAD_MINUS equ 0xDC
-KB_KC_KEYPAD_PLUS equ 0xDD
-KB_KC_KEYPAD_PERIOD equ 0xDE
-KB_KC_KEYPAD_ENTER equ 0xDF
-
-KB_KC_F1 equ 0xE0
-KB_KC_F2 equ 0xE1
-KB_KC_F3 equ 0xE2
-KB_KC_F4 equ 0xE3
-KB_KC_F5 equ 0xE4
-KB_KC_F6 equ 0xE5
-KB_KC_F7 equ 0xE6
-KB_KC_F8 equ 0xE7
-KB_KC_F9 equ 0xE8
-KB_KC_F10 equ 0xE9
-KB_KC_F11 equ 0xEA
-KB_KC_F12 equ 0xEB
-
-KB_KC_F13 equ 0xF0
-KB_KC_F14 equ 0xF1
-KB_KC_F15 equ 0xF2
-KB_KC_F16 equ 0xF3
-KB_KC_F17 equ 0xF4
-KB_KC_F18 equ 0xF5
-KB_KC_F19 equ 0xF6
-KB_KC_F20 equ 0xF7
-KB_KC_F21 equ 0xF8
-KB_KC_F22 equ 0xF9
-KB_KC_F23 equ 0xFA
-KB_KC_F24 equ 0xFB
-
-KB_KC_UNUSED equ 0xFF
+; ===================================================================
+;                        Scan Code Translation
+; ===================================================================
 
 ; Lookup table to scan code set 1 (one byte scan codes)
 ; We only need the first 128 entries because the MSB is reserved for the key state 
@@ -1325,6 +801,10 @@ kb_translate_six_byte_scan_code_to_key_code:
 
     ret
 
+; ====================================================================
+;                         Key Code State Logic
+; ====================================================================
+
 ; 256 bit buffer for storing the depression state of each key (0 = not pressed, 1 = pressed)
 _kb_key_pressed_state_buffer:
     times 32 db 0
@@ -1450,34 +930,14 @@ kb_handle_key_code:
     ; Set the key state in the key state buffer
     call kb_set_key_pressed
 
-    %macro print_pressed_state 0
-        je %%yes
+    ; Create the key event packet from the key code
+    call kb_create_key_event_packet
 
-        %%no:
-            mkprint_color('not pressed', VGA_COLOR_FG_BRIGHT_RED)
-            jmp %%finished
+    ; Enqueue the key event packet to be consumed by the operating system
+    call kb_key_evt_enqueue
 
-        %%yes:
-            mkprint_color('pressed    ', VGA_COLOR_FG_BRIGHT_GREEN)
-
-        %%finished:
-    %endmacro
-
-    mkprint('shift state = ')
-    call kb_is_shift_pressed
-    print_pressed_state
-
-    mkprint(' ctrl state = ')
-    call kb_is_ctrl_pressed
-    print_pressed_state
-
-    mkprint(' alt state = ')
-    call kb_is_alt_pressed
-    print_pressed_state
-
-    mkprintln()
-
-    popad
-    ret
+    .finished:
+        popad
+        ret
 
 %endif

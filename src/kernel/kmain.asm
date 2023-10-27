@@ -34,6 +34,35 @@ kmain:
     ; Enable cursor and prep for keyboard key event
     call vga_enable_cursor
     mkprintln()
+
+    ; Consume key events
+    .keyboard_loop:
+        call kb_get_next_key_event
+
+        mkprint('Got key event: ')
+        call kprint_dword
+
+        ; ===========================
+
+        mkprint(' has shift = ')
+        call kb_key_event_has_shift
+        call kprint_zf_as_bool
+
+        ; ===========================
+
+        mkprint(' has ctrl = ')
+        call kb_key_event_has_ctrl
+        call kprint_zf_as_bool
+
+        ; ===========================
+
+        mkprint(' has alt = ')
+        call kb_key_event_has_alt
+        call kprint_zf_as_bool
+        mkprintln()
+
+        jmp .keyboard_loop
+
 halt:
     ; Halt the processor
     hlt
@@ -41,4 +70,3 @@ halt:
 
 %include "vga.asm"
 %include "interrupt/init.asm"
-%include "drivers/keyboard.asm"

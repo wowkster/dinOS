@@ -3,7 +3,7 @@
 
 %include "vga.asm"
 %include "interrupt/pic.asm"
-%include "drivers/keyboard.asm"
+%include "drivers/keyboard/keyboard.asm"
 
 ;
 ; General exception handler
