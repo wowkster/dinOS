@@ -133,6 +133,24 @@ kprintln:
         ret
 
 ;
+; Prints the given byte as an ASCII character
+; @input al - char to print
+;
+kprint_char:
+    pushad
+    
+    mov [.template], al
+
+    mov esi, .template
+    mov ah, VGA_COLOR_FG_BRIGHT_CYAN
+    call kprint_color
+
+    popad
+    ret
+
+    .template: db "?", 0
+
+;
 ; Prints a byte as hex ("0x??")
 ; @input al - byte to print
 ;
