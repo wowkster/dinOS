@@ -133,6 +133,51 @@ kprintln:
         ret
 
 ;
+; Prints the given byte as a boolean (0 = false, anything else = true)
+; @input al - bool to print
+;
+kprint_bool:
+    pushad
+    
+    cmp al, 0
+    je .false
+
+    .true:
+        mov esi, .true_str
+        mov ah, VGA_COLOR_FG_BRIGHT_GREEN
+        jmp .print
+
+    .false:
+        mov esi, .false_str
+        mov ah, VGA_COLOR_FG_BRIGHT_RED
+
+    .print:
+        call kprint_color
+
+    popad
+    ret
+
+    .true_str: db "true", 0
+    .false_str: db "false", 0
+
+;
+; Prints the value of the zero flag as a boolean
+; @input zf - zero flag
+;
+kprint_zf_as_bool:
+    pushad
+
+    lahf
+    mov al, ah
+    and al, 001000000b
+    shr al, 6
+
+    call kprint_bool
+
+    popad
+    ret
+
+;
 ; Prints the given byte as an ASCII character
 ; @input al - char to print
 ;
