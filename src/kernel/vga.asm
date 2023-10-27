@@ -174,6 +174,101 @@ kprint_byte:
     .template: db "0x??", 0
 
 ;
+; Prints a word as hex ("0x????")
+; @input ax - word to print
+;
+kprint_word:
+    pushad
+    
+    ; Store the upper byte in bl
+    mov bl, ah
+
+    ; Convert first byte into hex chars
+    call byte_to_hex
+
+    ; Insert first byte (LSB) into template string
+    mov byte [.template + 4], ah
+    mov byte [.template + 5], al
+
+    ; Restore the upper byte
+    mov al, bl
+
+    ; Convert second byte into hex chars
+    call byte_to_hex
+
+    ; Insert second byte (MSB) into template string
+    mov byte [.template + 2], ah
+    mov byte [.template + 3], al
+
+    mov esi, .template
+    mov ah, VGA_COLOR_FG_LIGHT_GRAY
+    call kprint_color
+
+    popad
+    ret
+
+    .template: db "0x????", 0
+
+;
+; Prints a dword as hex ("0x????????")
+; @input eax - word to print
+;
+kprint_dword:
+    pushad
+
+    ; Store the upper byte in bl
+    mov bl, ah
+
+    ; Convert first byte into hex chars
+    call byte_to_hex
+
+    ; Insert first byte (LSB) into template string
+    mov byte [.template + 8], ah
+    mov byte [.template + 9], al
+
+    ; Restore the upper byte
+    mov al, bl
+
+    ; Convert second byte into hex chars
+    call byte_to_hex
+
+    ; Insert second byte (MSB) into template string
+    mov byte [.template + 6], ah
+    mov byte [.template + 7], al
+
+    ; Shift the MSW into the LSW
+    shr eax, 16
+
+    ; Store the upper byte in bl
+    mov bl, ah
+
+    ; Convert first byte into hex chars
+    call byte_to_hex
+
+    ; Insert first byte (LSB) into template string
+    mov byte [.template + 4], ah
+    mov byte [.template + 5], al
+
+    ; Restore the upper byte
+    mov al, bl
+
+    ; Convert second byte into hex chars
+    call byte_to_hex
+
+    ; Insert second byte (MSB) into template string
+    mov byte [.template + 2], ah
+    mov byte [.template + 3], al
+
+    mov esi, .template
+    mov ah, VGA_COLOR_FG_LIGHT_GRAY
+    call kprint_color
+
+    popad
+    ret
+
+    .template: db "0x????????", 0
+
+;
 ; Accepts an input byte and returns the char codes for it's individual nibbles
 ;
 ; @input al - byte to conver to hex
