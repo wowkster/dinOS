@@ -170,6 +170,7 @@ kb_get_next_key_event:
 
 ;
 ; Checks to see if the given key event has the specified modifier key pressed
+; @input eax - key event packet
 ;
 %macro create_key_event_has_modifier 2
     kb_key_event_has_%{1}:

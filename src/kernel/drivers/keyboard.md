@@ -1,8 +1,26 @@
 # Keyboard Driver Documentation
 
-## Public Functions
+## PS/2 Keyboard Commands
 
-The following are publicly exposed functions from the keyboard driver for use in other parts of the kernel.
+The PS/2 keyboard interface allows us to send certain [commands](https://wiki.osdev.org/PS/2_Keyboard#Commands) to the keyboard in order to set a part of its state, check its compatibility, and other functions.
+
+### Available Commands
+
+| Command                         | Description                                                         |
+| ------------------------------- | ------------------------------------------------------------------- |
+| KB_CMD_SET_LEDS                 | Sets the state of the keyboard's LEDs                               |
+| KB_CMD_ECHO                     | Pings the keyboard and expects the same value in response           |
+| KB_CMD_SCAN_CODE_SET            | Allows getting and setting the current scan code set                |
+| KB_CMD_IDENTIFY                 | Identifies the type of keyboard we're working with                  |
+| KB_CMD_SET_TYPEMATIC_RATE_DELAY | Sets the delay and rate for key repeating                           |
+| KB_CMD_ENABLE_SCANNING          | Enables receiving key scan codes                                    |
+| KB_CMD_DISABLE_SCANNING         | Disables receiving key scan codes                                   |
+| KB_CMD_SET_DEFAULT_PARAMS       | Restores the keyboard to its default state                          |
+| KB_CMD_RESEND                   | Tells the keyboard to resend the last byte                          |
+| KB_CMD_RESET_SELF_TEST          | Resets the keyboard and forces it to do a POST (Power On Self Test) |
+
+> [!WARNING]
+> Receiving data bytes in command responses is not yet implemented!
 
 ### kb_queue_command
 
@@ -52,12 +70,19 @@ _This function takes no arguments and does not return anything._
 | 0xE0 | F1                          | F2                      | F3                      | F4                         | F5                       | F6                       | F7                       | F8                | F9                       | F10                | F11                       | F12         |            |            |              |                |
 | 0xF0 | F13                         | F14                     | F15                     | F16                        | F17                      | F18                      | F19                      | F20               | F21                      | F22                | F23                       | F24         |            |            |              |                |
 
-## Keyboard Packets
+## Key Events
 
-Accepting keyboard input is useless if you cant consume the keys being pressed, so the following section is about the keyboard packet subscription model.
+Accepting keyboard input is useless if you cant consume the keys being pressed, so the following section is about the key event subscription model.
 
-> [!WARNING]
-> This function is not yet implemented
+### Key Event Queue
+
+As scan codes come in from the keyboard, the keyboard driver decodes them into dinOS [Key Codes](#Key_Codes). 
+When a full key code is decoded, a key event packet is created and added to the key event queue.
+The OS can then, at its leisure, pull key events from the queue or await a key event using [kb_get_next_key_event](#kb_get_next_key_event).
+
+### Key Event Packet
+
+Key events are encoded as 32-bit values in the following format:
 
 ```c
 struct kb_key_event_packet {
@@ -78,3 +103,38 @@ struct kb_key_event_packet {
                              //   5 - scroll lock state
 }
 ```
+
+### kb_get_next_key_event
+
+This function will get the next key event from the key event queue or block until one is available.
+
+| Register | I/O    | Description          |
+| -------- | ------ | -------------------- |
+| eax      | Output | The key event packet |
+
+### kb_key_event_has_shift
+
+This function will check to see if a key event packet has the shift modifier key pressed
+
+| Register | I/O    | Description          |
+| -------- | ------ | -------------------- |
+| eax      | Input  | The key event packet |
+| zf       | Output | Set if the event has the shift modifier pressed |
+
+### kb_key_event_has_ctrl
+
+This function will check to see if a key event packet has the ctrl modifier key pressed
+
+| Register | I/O    | Description          |
+| -------- | ------ | -------------------- |
+| eax      | Input  | The key event packet |
+| zf       | Output | Set if the event has the ctrl modifier pressed |
+
+### kb_key_event_has_alt
+
+This function will check to see if a key event packet has the alt modifier key pressed
+
+| Register | I/O    | Description          |
+| -------- | ------ | -------------------- |
+| eax      | Input  | The key event packet |
+| zf       | Output | Set if the event has the alt modifier pressed |
