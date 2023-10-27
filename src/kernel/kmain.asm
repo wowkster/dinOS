@@ -17,6 +17,7 @@ org 0x10000
 kmain:
     .clear_vga_buffer:
         call clear_screen
+        call vga_disable_cursor
 
     ; Kernel boot message
     mkprint('dinOS version 0.0.1-beta-x86 (nasm version ')
@@ -29,6 +30,10 @@ kmain:
 
     ; Initialize drivers
     enumerate_driver_init_functions(call_with_ok)
+
+    ; Enable cursor and prep for keyboard key event
+    call vga_enable_cursor
+    mkprintln()
 halt:
     ; Halt the processor
     hlt

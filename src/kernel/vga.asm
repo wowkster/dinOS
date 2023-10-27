@@ -8,6 +8,8 @@ VIDEO_MEMORY_ADDR equ 0xB8000
 
 SCREEN_ROWS equ 25
 SCREEN_COLS equ 80
+SCREEN_HEIGHT equ SCREEN_ROWS
+SCREEN_WIDTH equ SCREEN_COLS
 SCREEN_CAPACITY equ SCREEN_ROWS * SCREEN_COLS
 
 VGA_COLOR_FG_BLACK equ 0x00
@@ -26,6 +28,17 @@ VGA_COLOR_FG_BRIGHT_RED equ 0x0C
 VGA_COLOR_FG_BRIGHT_MAGENTA equ 0x0D
 VGA_COLOR_FG_BRIGHT_YELLOW equ 0x0E
 VGA_COLOR_FG_WHITE equ 0x0F
+
+; VGA IO Ports
+VGA_ADDR_PORT equ 0x3D4
+VGA_DATA_PORT equ 0x3D5
+VGA_MAX_SCAN_LINE_REGISTER equ 0x09
+VGA_CURSOR_START_REGISTER equ 0x0A
+VGA_CURSOR_END_REGISTER equ 0x0B
+VGA_CURSOR_LOC_LOW_REGISTER equ 0x0F
+VGA_CURSOR_LOC_HIGH_REGISTER equ 0x0E
+
+VGA_CURSOR_DISABLE equ 0x20
 
 ; Static variable to hold our offset into the video memory
 _print_offset: dw 0
@@ -52,7 +65,6 @@ kprint_color:
         cmp al, 0
         je .finished
 
-
     ; If there is enugh room on the screen for the next character, just print it. Otherwise, scroll the screen first
     .scroll_if_needed:
         mov bx, [_print_offset]
@@ -70,6 +82,13 @@ kprint_color:
     .continue_loop:
         inc bx
         mov [_print_offset], bx
+
+        ; Update the cursor position
+        push eax
+        mov ax, bx
+        call vga_update_cursor_with_offset
+        pop eax
+
         jmp .print_loop
 
     .finished:
@@ -127,6 +146,7 @@ kprintln:
         mov ax, [_print_offset]
         add ax, bx
         mov word [_print_offset], ax
+        call vga_update_cursor_with_offset
 
     .finished:
         popad
@@ -354,20 +374,16 @@ byte_to_hex:
 clear_screen:
     pushad
 
-    mov edi, 0
+     ; memset the entire screen to be empty
+    mov eax, VIDEO_MEMORY_ADDR ; ptr
 
-.clear_loop:
-    ; Use di as an index into the video memory clearing 1 char (2 bytes) at a time
-    mov word [edi * 2 + VIDEO_MEMORY_ADDR], 0x0000
+    mov bh, VGA_COLOR_FG_WHITE 
+    mov bl, 0
 
-    ; Increment the counter
-    inc edi
+    mov ecx, SCREEN_CAPACITY ; num
 
-    ; Check if we reached the end of the video memory
-    cmp edi, SCREEN_CAPACITY
-    jne .clear_loop
+    call memset_16
 
-.clear_done:
     popad
     ret
 
@@ -388,15 +404,16 @@ scroll_screen:
 
     call memcpy
 
-    ; memset the bottom row to 0
+    ; memset the bottom row to be empty
     mov eax, SCREEN_COLS * (SCREEN_ROWS - 1) * 2
     lea eax, [VIDEO_MEMORY_ADDR + eax] ; ptr
 
-    mov bl, 0 ; value
+    mov bh, VGA_COLOR_FG_WHITE 
+    mov bl, 0
 
-    mov ecx, SCREEN_COLS * 2 ; num
+    mov ecx, SCREEN_COLS ; num
 
-    call memset
+    call memset_16
 
     popad
     ret
@@ -437,5 +454,126 @@ __kpanic:
     .halt:
         hlt
         jmp .halt
+
+;
+; Enables the VGA cursor in text mode
+;
+vga_enable_cursor:
+    pushad
+
+    ; Set Max Scan Line to 15
+    mov al, VGA_MAX_SCAN_LINE_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, 0x0F
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+    ; Set cursor end line to 15
+    mov al, VGA_CURSOR_END_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, 0x0F
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+    ; Set cursor start line to 14
+    mov al, VGA_CURSOR_START_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, 0x0E
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+    popad
+    ret
+
+;
+; Disables the VGA cursor in text mode
+;
+vga_disable_cursor:
+    pushad
+
+    mov al, VGA_CURSOR_START_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, VGA_CURSOR_DISABLE
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+    popad
+    ret
+
+;
+; Update the VGA test mode cursor position
+; @input al - Cursor row
+; @input ah - Cursor column
+;
+vga_update_cursor:
+    pushad
+
+    ; bx = offset of row (row * screen width)
+    mov bx, 0
+    mov bl, al
+    imul bx, SCREEN_WIDTH
+
+    ; bx = offset of row + column   
+    shr ax, 8
+    add bx, ax
+
+    ; Update the cursor position (low byte)
+    mov al, VGA_CURSOR_LOC_LOW_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, bl
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+     ; Update the cursor position (high byte)
+    mov al, VGA_CURSOR_LOC_HIGH_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, bh
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+    popad
+    ret
+
+;
+; Update the VGA test mode cursor position with a precalculated offset
+; @input ax - Cursor offset
+;
+vga_update_cursor_with_offset:
+    pushad
+
+    mov bx, ax
+
+    ; Update the cursor position (low byte)
+    mov al, VGA_CURSOR_LOC_LOW_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, bl
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+     ; Update the cursor position (high byte)
+    mov al, VGA_CURSOR_LOC_HIGH_REGISTER
+    mov dx, VGA_ADDR_PORT
+    out dx, al
+
+    mov al, bh
+    mov dx, VGA_DATA_PORT
+    out dx, al
+
+    popad
+    ret
 
 %endif
