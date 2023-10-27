@@ -28,8 +28,38 @@
     pop esi
 %endmacro
 
+%macro __mkprint_color_macro 2
+    push esi
+    push eax
+
+    mov esi, %%data
+    mov ah, %2
+    call kprint_color
+
+    pop eax
+    pop esi
+    jmp %%finished
+
+    %%data:
+        db %1, 0
+
+    %%finished:
+%endmacro
+
+%define mkprint_color(string, color) \
+    __mkprint_color_macro string, color
+
+%macro __mkprintln_no_args_macro 0
+    push esi
+
+    mov esi, 0
+    call kprintln
+
+    pop esi
+%endmacro
+
 %define mkprintln() \
-    __mkprintln_macro
+    __mkprintln_no_args_macro
 
 %macro __mkprintln_macro 1
     push esi

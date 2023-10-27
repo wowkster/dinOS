@@ -710,7 +710,7 @@ kb_handle_complete_one_byte_scan_code:
 
     call kb_translate_one_byte_scan_code_to_key_code
 
-    mkprint(' -> ')
+    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
 
     call kprint_byte
 
@@ -720,11 +720,11 @@ kb_handle_complete_one_byte_scan_code:
     je .key_released
 
     .key_pressed:
-        mkprint('pressed')
+        mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
         jmp .print_end
 
     .key_released:
-        mkprint('released')
+        mkprint_color('released', VGA_COLOR_FG_BRIGHT_RED)
 
     .print_end:
         mkprintln(')')
@@ -746,7 +746,7 @@ kb_handle_complete_two_byte_scan_code:
 
     call kb_translate_two_byte_scan_code_to_key_code
 
-    mkprint(' -> ')
+    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
 
     call kprint_byte
 
@@ -756,11 +756,11 @@ kb_handle_complete_two_byte_scan_code:
     je .key_released
 
     .key_pressed:
-        mkprint('pressed')
+        mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
         jmp .print_end
 
     .key_released:
-        mkprint('released')
+        mkprint_color('released', VGA_COLOR_FG_BRIGHT_RED)
 
     .print_end:
         mkprintln(')')
@@ -782,7 +782,7 @@ kb_handle_complete_four_byte_scan_code:
 
     call kb_translate_four_byte_scan_code_to_key_code
 
-    mkprint(' -> ')
+    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
 
     call kprint_byte
 
@@ -792,11 +792,11 @@ kb_handle_complete_four_byte_scan_code:
     je .key_released
 
     .key_pressed:
-        mkprint('pressed')
+        mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
         jmp .print_end
 
     .key_released:
-        mkprint('released')
+        mkprint_color('released', VGA_COLOR_FG_BRIGHT_RED)
 
     .print_end:
         mkprintln(')')
@@ -818,11 +818,11 @@ kb_handle_complete_six_byte_scan_code:
 
     call kb_translate_two_byte_scan_code_to_key_code
 
-    mkprint(' -> ')
+    mkprint_color(' -> ', VGA_COLOR_FG_DARK_GRAY)
 
     call kprint_byte
 
-    mkprintln(' (pressed)')
+    mkprint_color('pressed', VGA_COLOR_FG_BRIGHT_GREEN)
 
     popad
     ret

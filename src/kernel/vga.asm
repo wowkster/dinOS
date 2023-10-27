@@ -147,7 +147,8 @@ kprint_byte:
     mov byte [.template + 3], al
 
     mov esi, .template
-    call kprint
+    mov ah, VGA_COLOR_FG_LIGHT_GRAY
+    call kprint_color
 
     popad
     ret
