@@ -391,7 +391,7 @@ kb_process_scan_code_buffer:
             mov byte [_kb_driver_state], bl
 
             ; Handle the 6 byte scan code
-            call kb_translate_two_byte_scan_code_to_key_code
+            call kb_translate_six_byte_scan_code_to_key_code
             call kb_handle_key_code
 
             jmp .reset_kb_scan_code_buffer
