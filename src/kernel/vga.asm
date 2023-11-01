@@ -30,6 +30,7 @@ VGA_COLOR_FG_BRIGHT_YELLOW equ 0x0E
 VGA_COLOR_FG_WHITE equ 0x0F
 
 ; VGA IO Ports
+; http://www.osdever.net/FreeVGA/vga/crtcreg.htm
 VGA_ADDR_PORT equ 0x3D4
 VGA_DATA_PORT equ 0x3D5
 VGA_MAX_SCAN_LINE_REGISTER equ 0x09
@@ -457,6 +458,7 @@ __kpanic:
 
 ;
 ; Enables the VGA cursor in text mode
+; https://wiki.osdev.org/Text_Mode_Cursor
 ;
 vga_enable_cursor:
     pushad
@@ -493,6 +495,7 @@ vga_enable_cursor:
 
 ;
 ; Disables the VGA cursor in text mode
+; https://wiki.osdev.org/Text_Mode_Cursor
 ;
 vga_disable_cursor:
     pushad
@@ -510,6 +513,7 @@ vga_disable_cursor:
 
 ;
 ; Update the VGA test mode cursor position
+; https://wiki.osdev.org/Text_Mode_Cursor
 ; @input al - Cursor row
 ; @input ah - Cursor column
 ;
