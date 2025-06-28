@@ -175,7 +175,7 @@ _kb_key_code_to_primary_ascii_char_lookup_table:
     .0x34: db ']', '\', ';', "'"
     .0x38: db ',', '.', '/', 0
     .0x3C: db 0,   0,   0,   0
-    .0x40: db 0,   0,   0,   0
+    .0x40: db 0,   0,   ' ', 0
     .0x44: db 0,   0,   0,   0
     .0x48: db 0,   0,   0,   0
     .0x4C: db 0,   0,   0,   0
@@ -241,7 +241,7 @@ _kb_key_code_to_secondary_ascii_char_lookup_table:
     .0x34: db '}', '|', ':', '"'
     .0x38: db '<', '>', '?', 0
     .0x3C: db 0,   0,   0,   0
-    .0x40: db 0,   0,   0,   0
+    .0x40: db 0,   0,   ' ', 0
     .0x44: db 0,   0,   0,   0
     .0x48: db 0,   0,   0,   0
     .0x4C: db 0,   0,   0,   0
