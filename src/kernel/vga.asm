@@ -369,6 +369,36 @@ byte_to_hex:
 
     .table: db "0123456789ABCDEF"
 
+
+
+; 
+; Clears the last character and moves the cursor back one space
+;
+kprint_backspace:
+    pushad
+
+    ; ebx will hold our offset
+    xor ebx, ebx
+
+    ; Decrement the print offset
+    mov bx, [_print_offset]
+    dec bx
+    mov [_print_offset], bx
+
+    ; Load a null character
+    mov al, 0
+    mov ah, VGA_COLOR_FG_WHITE
+
+    ; Write the null character to the video memory
+    mov [ebx * 2 + VIDEO_MEMORY_ADDR], ax
+
+    ; Update the cursor position
+    mov ax, bx
+    call vga_update_cursor_with_offset
+
+    popad
+    ret
+
 ;
 ; Function to clear the entire video buffer
 ;
@@ -551,7 +581,7 @@ vga_update_cursor:
     ret
 
 ;
-; Update the VGA test mode cursor position with a precalculated offset
+; Update the VGA text mode cursor position with a precalculated offset
 ; @input ax - Cursor offset
 ;
 vga_update_cursor_with_offset:
