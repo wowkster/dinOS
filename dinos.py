@@ -10,14 +10,14 @@ class ansi_colors:
     DEFAULT = '\033[0m'
 
 ## Run the given program with the given arguments
-def execute_program(program: str, arguments: [str]):
+def execute_program(program: str, arguments: list[str]):
     print(ansi_colors.GRAY +
           f"Executing command: {program} {' '.join(arguments)}" + ansi_colors.DEFAULT)
     os.execvp(program, [program, *arguments])
 
 
 ## Run qemu with the given additional arguments
-def run_qemu(additional_arguments: [str] = []):
+def run_qemu(additional_arguments: list[str] = []):
     program = "qemu-system-i386"
     arguments = ["-monitor", "stdio", "-fda",
                  "./build/main.img", "-name", "dinOS"]
@@ -81,7 +81,7 @@ def expect_argc(argc: int):
         exit(1)
 
 ## Check that the given dependency is installed
-def check_dependency(name: str, program_args: [str]):
+def check_dependency(name: str, program_args: list[str]):
     try:
         subprocess.call(program_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
